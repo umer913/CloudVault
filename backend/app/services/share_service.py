@@ -59,11 +59,16 @@ def create_share(
 
 
 def list_owned_shares(db: Session, user: User) -> list[Share]:
+    now = datetime.now(timezone.utc)
     return list(
         db.scalars(
             select(Share)
             .join(File, File.id == Share.file_id)
-            .where(File.user_id == user.id)
+            .where(
+                File.user_id == user.id,
+                Share.revoked_at.is_(None),
+                Share.expires_at > now,
+            )
             .order_by(Share.created_at.desc(), Share.id.desc())
         )
     )

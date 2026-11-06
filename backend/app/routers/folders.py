@@ -18,11 +18,15 @@ from app.services.folder_service import (
     list_folders,
     rename_folder,
 )
-from app.services.supabase_storage_service import SupabaseStorage
+from app.services.active_storage import create_storage
 from app.utils.dependencies import get_current_user
 
 
 router = APIRouter()
+
+
+def SupabaseStorage():
+    return create_storage()
 
 
 @router.post("", response_model=FolderOut, status_code=201)

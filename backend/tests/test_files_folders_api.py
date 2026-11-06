@@ -115,3 +115,47 @@ def test_file_is_not_accessible_to_another_user(client, make_user, monkeypatch):
     response = client.get(f"/api/files/{file_id}", headers=other_headers)
     assert response.status_code == 404
     assert response.json()["code"] == "FILE_NOT_FOUND"
+
+
+def test_root_file_list_excludes_files_inside_folders(client, make_user, monkeypatch):
+    headers, _ = make_user()
+
+    class FakeStorage:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def upload(self, *_args, **_kwargs):
+            return None
+
+    monkeypatch.setattr(
+        "app.routers.files.SupabaseStorage",
+        lambda: FakeStorage(),
+    )
+    folder = client.post(
+        "/api/folders",
+        json={"name": "Books"},
+        headers=headers,
+    ).json()
+
+    root_file = client.post(
+        "/api/files/upload",
+        files={"file": ("root.txt", BytesIO(b"root"), "text/plain")},
+        headers=headers,
+    )
+    nested_file = client.post(
+        "/api/files/upload",
+        data={"folder_id": str(folder["id"])},
+        files={"file": ("nested.txt", BytesIO(b"nested"), "text/plain")},
+        headers=headers,
+    )
+    assert root_file.status_code == 201
+    assert nested_file.status_code == 201
+
+    root_listing = client.get("/api/files", headers=headers)
+    assert root_listing.status_code == 200
+    assert [item["original_name"] for item in root_listing.json()["items"]] == [
+        "root.txt"
+    ]

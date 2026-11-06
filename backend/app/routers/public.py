@@ -11,9 +11,14 @@ from app.services.share_service import (
     get_public_share,
     verify_share_password,
 )
-from app.services.supabase_storage_service import StorageError, SupabaseStorage
+from app.services.active_storage import create_storage
+from app.services.supabase_storage_service import StorageError
 
 router = APIRouter()
+
+
+def SupabaseStorage():
+    return create_storage()
 _PREVIEWABLE = {"pdf", "png", "jpg", "jpeg", "txt"}
 
 

@@ -1,0 +1,117 @@
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark small">C</span><strong>CloudVault</strong></div>
+    <nav><button class="nav-item active" type="button">▦ <span>My files</span></button><button class="nav-item" type="button" (click)="showShares()">↗ <span>Shared links</span></button></nav>
+    <div class="sidebar-bottom">
+      <div class="profile"><div class="avatar">{{ auth.user()!.name.charAt(0).toUpperCase() }}</div><div><strong>{{ auth.user()!.name }}</strong><span>{{ auth.user()!.email }}</span></div></div>
+      <button class="logout" type="button" (click)="auth.logout()">Sign out</button>
+    </div>
+  </aside>
+  <main class="content">
+    <header><div><p class="eyebrow">YOUR WORKSPACE</p><h1>My files</h1></div><div class="header-actions"><button class="secondary-button" type="button" (click)="showFolderDialog()">+ New folder</button><label class="upload-button" [class.disabled]="isUploading()">+ Upload files<input type="file" [disabled]="isUploading()" (change)="upload($event)" /></label></div></header>
+    @if (isUploading()) {
+      <section class="upload-status" aria-live="polite">
+        <div class="upload-status-heading"><strong>{{ uploadPhase() }}</strong>@if (uploadProgress() !== null) {<span>{{ uploadProgress() }}%</span>} @else {<span>In progress</span>}</div>
+        <div class="upload-progress" [class.indeterminate]="uploadProgress() === null"><span [style.width.%]="uploadProgress()"></span></div>
+        <div class="upload-status-footer"><span class="muted">Large files may take time while they are being transferred to storage. Keep this window open.</span><button class="secondary-button" type="button" (click)="cancelUpload()">Cancel</button></div>
+      </section>
+    }
+    @if (usage(); as storage) {
+      <section class="usage-card"><div><span class="muted">Storage used</span><strong>{{ formatBytes(storage.used_bytes) }} <small>of {{ formatBytes(storage.quota_bytes) }}</small></strong></div><div class="progress"><span [style.width.%]="storage.percent_used"></span></div><span class="muted">{{ storage.percent_used }}% used</span></section>
+    }
+    @if (error()) { <div class="error-banner">{{ error() }}</div> }
+    <div class="toolbar"><div class="breadcrumbs"><button type="button" [disabled]="isLoading()" (click)="openRoot()">My files</button>@for (crumb of contents()?.breadcrumbs; track crumb.id) {<span> / <button type="button" [disabled]="isLoading()" (click)="openFolder(crumb.id)">{{ crumb.name }}</button></span>}</div><span class="muted">{{ totalFiles() }} files</span></div>
+    <section class="file-tools">
+      <label class="search-box">Search files<input type="search" [value]="searchQuery()" (input)="onSearchChange($any($event.target).value)" placeholder="Search by filename" /></label>
+      <label>Type<select [value]="fileType()" (change)="fileType.set($any($event.target).value); changeFilter()"><option value="">All types</option><option value="documents">Documents</option><option value="images">Images</option><option value="archives">Archives</option><option value="data">Data</option></select></label>
+      <label>Sort<select [value]="sortField()" (change)="sortField.set($any($event.target).value); changeFilter()"><option value="created_at">Date added</option><option value="name">Name</option><option value="size">Size</option></select></label>
+      <button class="secondary-button sort-order" type="button" (click)="sortOrder.set(sortOrder() === 'asc' ? 'desc' : 'asc'); changeFilter()">{{ sortOrder() === 'asc' ? 'Ascending' : 'Descending' }}</button>
+    </section>
+    <section class="file-grid" [class.is-loading]="isLoading()">
+      @if (isLoading()) {
+        <div class="loading-panel" aria-live="polite"><span class="spinner"></span><strong>Loading folder...</strong><span class="muted">Fetching your files and folders</span></div>
+      }
+      @if (!isLoading()) {
+      @for (folder of contents()?.folders; track folder.id) {<div class="file-card folder-card"><button class="folder-main" type="button" [disabled]="isLoading() || !!folderActionId()" (click)="openFolder(folder.id)"><span class="file-icon folder">▰</span><strong>{{ folder.name }}</strong><span class="muted">Folder</span></button><div class="file-actions"><button type="button" (click)="showFolderRenameDialog(folder.id, folder.name)">Rename</button><button type="button" class="danger" (click)="deleteFolder(folder.id, folder.name)">Delete</button></div></div>}
+      @for (file of contents()?.files; track trackFile($index, file)) {<div class="file-card"><span class="file-icon">{{ file.extension.toUpperCase() }}</span><strong>{{ file.original_name }}</strong><span class="muted">{{ formatBytes(file.size) }}</span><div class="file-actions"><button type="button" (click)="downloadFile(file)">Download</button>@if (['pdf','png','jpg','jpeg','txt'].includes(file.extension)) {<button type="button" (click)="downloadFile(file, true)">Preview</button>}<button type="button" (click)="showShareDialog(file)">Share</button><button type="button" (click)="showRenameDialog(file)">Rename</button><button type="button" class="danger" (click)="deleteFile(file)">Delete</button></div></div>}
+      @if (!contents()?.folders?.length && !contents()?.files?.length) {<div class="empty"><span>✦</span><h2>This space is yours</h2><p>Upload a file to start building your vault.</p></div>}
+      }
+      @if (isRenameDialogOpen()) {
+        <div class="modal-backdrop" (click)="closeRenameDialog()">
+          <section class="folder-dialog" role="dialog" aria-modal="true" aria-labelledby="rename-title" (click)="$event.stopPropagation()">
+            <h2 id="rename-title">Rename file</h2>
+            <p class="muted">Keep the same file type when renaming.</p>
+            <form (ngSubmit)="renameFile()">
+              <label>File name <input name="renameName" [(ngModel)]="renameName" maxlength="255" required autofocus /></label>
+              <div class="dialog-actions">
+                <button class="secondary-button" type="button" [disabled]="!!fileActionId()" (click)="closeRenameDialog()">Cancel</button>
+                <button class="primary-button" type="submit" [disabled]="!renameName.trim() || !!fileActionId()">{{ fileActionId() ? 'Saving...' : 'Save name' }}</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      }
+      @if (isFolderRenameDialogOpen()) {
+        <div class="modal-backdrop" (click)="closeFolderRenameDialog()">
+          <section class="folder-dialog" role="dialog" aria-modal="true" aria-labelledby="folder-rename-title" (click)="$event.stopPropagation()">
+            <h2 id="folder-rename-title">Rename folder</h2>
+            <form (ngSubmit)="renameFolder()">
+              <label>Folder name <input name="folderName" [(ngModel)]="folderName" maxlength="255" required autofocus /></label>
+              <div class="dialog-actions"><button class="secondary-button" type="button" [disabled]="!!folderActionId()" (click)="closeFolderRenameDialog()">Cancel</button><button class="primary-button" type="submit" [disabled]="!folderName.trim() || !!folderActionId()">{{ folderActionId() ? 'Saving...' : 'Save name' }}</button></div>
+            </form>
+          </section>
+        </div>
+      }
+      @if (isShareDialogOpen()) {
+        <div class="modal-backdrop" (click)="closeShareDialog()">
+          <section class="folder-dialog" role="dialog" aria-modal="true" aria-labelledby="share-title" (click)="$event.stopPropagation()">
+            <h2 id="share-title">Share {{ shareTarget()?.original_name }}</h2>
+            @if (shareResult(); as result) {
+              <p class="muted">Share created. Anyone with this link can access the file until it expires.</p>
+              <div class="share-link"><input readonly [value]="shareLink(result.token)" /><button class="primary-button" type="button" (click)="copyShareLink(result)">Copy</button></div>
+              <div class="dialog-actions"><button class="secondary-button" type="button" (click)="closeShareDialog()">Done</button></div>
+            } @else {
+              <form (ngSubmit)="createShare()">
+                <label>Permission <select name="sharePermission" [(ngModel)]="sharePermission"><option value="download">Download</option><option value="view">View only</option></select></label>
+                <label>Expires <input name="shareExpiresAt" type="datetime-local" [(ngModel)]="shareExpiresAt" required /></label>
+                <label>Password <input name="sharePassword" type="password" [(ngModel)]="sharePassword" minlength="8" maxlength="128" placeholder="Optional, 8+ characters" /></label>
+                <div class="dialog-actions"><button class="secondary-button" type="button" [disabled]="isSharing()" (click)="closeShareDialog()">Cancel</button><button class="primary-button" type="submit" [disabled]="isSharing()">{{ isSharing() ? 'Creating...' : 'Create link' }}</button></div>
+              </form>
+            }
+          </section>
+        </div>
+      }
+    </section>
+    @if (!isLoading() && totalFiles() > 0) {
+      <div class="pagination"><button class="secondary-button" type="button" [disabled]="!hasPreviousPage()" (click)="changePage(page() - 1)">Previous</button><span class="muted">Page {{ page() }} of {{ pageCount() }}</span><button class="secondary-button" type="button" [disabled]="!hasNextPage()" (click)="changePage(page() + 1)">Next</button></div>
+    }
+  </main>
+</div>
+@if (isFolderDialogOpen()) {
+  <div class="modal-backdrop" (click)="closeFolderDialog()">
+    <section class="folder-dialog" role="dialog" aria-modal="true" aria-labelledby="folder-title" (click)="$event.stopPropagation()">
+      <h2 id="folder-title">Create folder</h2>
+      <p class="muted">Create a folder in {{ contents()?.name ?? 'My files' }}.</p>
+      <form (ngSubmit)="createFolder()">
+        <label>Folder name <input name="folderName" [(ngModel)]="folderName" maxlength="255" required autofocus /></label>
+        <div class="dialog-actions">
+          <button class="secondary-button" type="button" [disabled]="isCreatingFolder()" (click)="closeFolderDialog()">Cancel</button>
+          <button class="primary-button" type="submit" [disabled]="!folderName.trim() || isCreatingFolder()">{{ isCreatingFolder() ? 'Creating...' : 'Create folder' }}</button>
+        </div>
+      </form>
+    </section>
+  </div>
+}
+@if (isSharesDialogOpen()) {
+  <div class="modal-backdrop" (click)="closeShares()">
+    <section class="folder-dialog shares-dialog" role="dialog" aria-modal="true" aria-labelledby="shares-title" (click)="$event.stopPropagation()">
+      <h2 id="shares-title">Shared links</h2>
+      @if (isLoadingShares()) { <div class="loading-panel"><span class="spinner"></span><span class="muted">Loading shared links...</span></div> }
+      @if (!isLoadingShares() && !shares().length) { <p class="muted">You have no active shared links.</p> }
+      @for (share of shares(); track share.id) {
+        <div class="share-row"><div><strong>File #{{ share.file_id }}</strong><span class="muted">{{ share.permission }} access · expires {{ formatDate(share.expires_at) }}</span></div><button class="danger-button" type="button" (click)="revokeShare(share)">Revoke</button></div>
+      }
+      <div class="dialog-actions"><button class="secondary-button" type="button" [disabled]="isLoadingShares()" (click)="closeShares()">Close</button></div>
+    </section>
+  </div>
+}

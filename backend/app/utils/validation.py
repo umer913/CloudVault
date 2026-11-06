@@ -78,6 +78,42 @@ def validate_upload(
     return ValidatedUpload(filename, extension, mime_type)
 
 
+def validate_upload_header(name: str, head: bytes) -> ValidatedUpload:
+    filename = sanitize_filename(name)
+    extension = _extension(filename)
+    if extension not in _MIME_BY_EXTENSION:
+        raise AppError(
+            422,
+            "UNSUPPORTED_TYPE",
+            "This file type is not supported.",
+        )
+
+    expected = _MIME_BY_EXTENSION[extension]
+    if extension == "pdf":
+        valid = head.startswith(b"%PDF-")
+    elif extension == "png":
+        valid = head.startswith(b"\x89PNG\r\n\x1a\n")
+    elif extension in {"jpg", "jpeg"}:
+        valid = head.startswith(b"\xff\xd8\xff")
+    elif extension == "zip":
+        valid = _is_zip(head)
+    elif extension in {"txt", "csv", "json"}:
+        valid = _valid_utf8_text(head)
+    elif extension == "docx":
+        kind = filetype.guess(head)
+        valid = kind is not None and kind.extension == "docx"
+    else:
+        valid = False
+
+    if not valid:
+        raise AppError(
+            422,
+            "UNSUPPORTED_TYPE",
+            "The file content does not match its extension.",
+        )
+    return ValidatedUpload(filename, extension, expected)
+
+
 def _extension(filename: str) -> str:
     if "." not in filename or filename.endswith("."):
         return ""

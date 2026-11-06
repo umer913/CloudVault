@@ -7,3 +7,5 @@ __pycache__/
 dist/
 .DS_Store
 .pytest_cache/
+CloudVault_Blueprint_Supabase_Revised.pdf
+CloudVault_Build_Guide_Supabase_Updated.pdf

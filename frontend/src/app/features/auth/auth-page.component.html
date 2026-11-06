@@ -1,0 +1,22 @@
+<main class="auth-page">
+  <section class="auth-card">
+    <div class="brand-mark">C</div>
+    <p class="eyebrow">PRIVATE CLOUD STORAGE</p>
+    <h1>{{ mode() === 'login' ? 'Welcome back' : 'Create your vault' }}</h1>
+    <p class="muted">{{ mode() === 'login' ? 'Sign in to access your files.' : 'Keep your important files organized and secure.' }}</p>
+    <form (ngSubmit)="submit()" #form="ngForm">
+      @if (mode() === 'register') {
+        <label>Name <input name="name" [(ngModel)]="name" required /></label>
+      }
+      <label>Email <input name="email" type="email" [(ngModel)]="email" required /></label>
+      <label>Password <input name="password" type="password" [(ngModel)]="password" minlength="8" required /></label>
+      @if (error()) { <p class="error">{{ error() }}</p> }
+      <button class="primary full" [disabled]="form.invalid || submitting()">
+        {{ submitting() ? 'Please wait...' : mode() === 'login' ? 'Sign in' : 'Create account' }}
+      </button>
+    </form>
+    <button class="link-button" type="button" (click)="toggleMode()">
+      {{ mode() === 'login' ? 'New to CloudVault? Create an account' : 'Already have an account? Sign in' }}
+    </button>
+  </section>
+</main>

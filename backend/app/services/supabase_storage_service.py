@@ -17,6 +17,10 @@ class StorageError(Exception):
     """Raised when Supabase Storage cannot complete an operation."""
 
 
+class StorageObjectTooLarge(StorageError):
+    """Raised when the Storage provider rejects an object for its size."""
+
+
 @dataclass(frozen=True)
 class StorageObject:
     content: bytes
@@ -69,10 +73,13 @@ class SupabaseStorage:
         *,
         content_type: str,
         size: int,
+        progress_callback: Any | None = None,
     ) -> None:
         key = self.validate_key(key)
         if size < 0:
             raise ValueError("Object size cannot be negative.")
+        if progress_callback:
+            progress_callback(0, size, "storing")
 
         try:
             response = self._client.post(
@@ -83,6 +90,10 @@ class SupabaseStorage:
                     "Content-Length": str(size),
                     "x-upsert": "false",
                 },
+                timeout=httpx.Timeout(
+                    settings.STORAGE_UPLOAD_TIMEOUT_SECONDS,
+                    connect=30.0,
+                ),
             )
             self._raise_for_storage(response)
         except (httpx.HTTPError, StorageError) as exc:
@@ -204,6 +215,17 @@ class SupabaseStorage:
     def _raise_for_storage(response: httpx.Response) -> None:
         if response.is_success:
             return
+        if response.status_code == 413:
+            raise StorageObjectTooLarge("Storage object exceeds the size limit.")
+        if response.status_code == 400:
+            try:
+                payload = response.json()
+            except ValueError:
+                payload = {}
+            if payload.get("code") == "EntityTooLarge":
+                raise StorageObjectTooLarge(
+                    "Storage object exceeds the size limit."
+                )
         if response.status_code == 404:
             raise StorageError("Storage object was not found.")
         raise StorageError(f"Storage request failed with status {response.status_code}.")

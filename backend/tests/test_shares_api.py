@@ -109,6 +109,10 @@ def test_revoked_share_is_not_publicly_available(client, make_user, monkeypatch)
     assert public.status_code == 404
     assert public.json()["code"] == "SHARE_NOT_FOUND"
 
+    listed = client.get("/api/shares", headers=headers)
+    assert listed.status_code == 200
+    assert listed.json() == []
+
 
 def test_share_expiry_must_be_future_and_within_thirty_days(
     client, make_user, monkeypatch

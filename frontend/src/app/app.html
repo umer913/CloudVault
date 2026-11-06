@@ -1,0 +1,7 @@
+@if (auth.isLoading()) {
+  <main class="loading">Loading CloudVault...</main>
+} @else if (auth.user()) {
+  <app-dashboard />
+} @else {
+  <app-auth-page />
+}

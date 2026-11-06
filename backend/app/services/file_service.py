@@ -12,7 +12,11 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.errors import AppError
 from app.models import File, Folder, User
-from app.services.supabase_storage_service import StorageError, SupabaseStorage
+from app.services.supabase_storage_service import (
+    StorageError,
+    StorageObjectTooLarge,
+    SupabaseStorage,
+)
 from app.utils.validation import (
     ValidatedUpload,
     sanitize_filename,
@@ -46,9 +50,7 @@ def list_files(
     limit: int,
     offset: int,
 ) -> tuple[list[File], int]:
-    filters = [File.user_id == user.id]
-    if folder_id is not None:
-        filters.append(File.folder_id == folder_id)
+    filters = [File.user_id == user.id, File.folder_id == folder_id]
     if query:
         escaped = (
             query.replace("\\", "\\\\")
@@ -173,6 +175,7 @@ def upload_file(
     content: BinaryIO,
     folder_id: int | None,
     storage: SupabaseStorage,
+    progress_callback=None,
 ) -> File:
     if folder_id is not None:
         folder = db.scalar(
@@ -216,6 +219,7 @@ def upload_file(
             content,
             content_type=validated.mime_type,
             size=size,
+            progress_callback=progress_callback,
         )
         uploaded = True
 
@@ -246,6 +250,18 @@ def upload_file(
         db.rollback()
         if uploaded:
             _delete_after_failure(storage, storage_key)
+        logger.exception(
+            "Storage upload failed for file %s (%d bytes).",
+            validated.original_name,
+            size,
+        )
+        if isinstance(exc, StorageObjectTooLarge):
+            raise AppError(
+                413,
+                "STORAGE_SIZE_LIMIT",
+                "Supabase Storage rejected this file because it exceeds "
+                "the configured Storage size limit.",
+            ) from exc
         raise AppError(
             502,
             "STORAGE_UNAVAILABLE",
@@ -255,6 +271,77 @@ def upload_file(
         db.rollback()
         if uploaded:
             _delete_after_failure(storage, storage_key)
+        raise
+
+
+def complete_direct_upload(
+    db: Session,
+    user: User,
+    *,
+    filename: str,
+    size: int,
+    folder_id: int | None,
+    mime_type: str,
+    extension: str,
+    storage_key: str,
+    checksum: str,
+) -> File:
+    if folder_id is not None:
+        folder = db.scalar(
+            select(Folder).where(
+                Folder.id == folder_id,
+                Folder.user_id == user.id,
+            )
+        )
+        if folder is None:
+            raise AppError(404, "FOLDER_NOT_FOUND", "Folder not found.")
+
+    if size > settings.MAX_UPLOAD_BYTES:
+        raise AppError(
+            413,
+            "FILE_TOO_LARGE",
+            "The file exceeds the maximum upload size.",
+        )
+
+    quota_update = db.execute(
+        update(User)
+        .where(
+            User.id == user.id,
+            User.used_bytes + size <= User.storage_quota,
+        )
+        .values(used_bytes=User.used_bytes + size)
+    )
+    if quota_update.rowcount != 1:
+        raise AppError(
+            413,
+            "QUOTA_EXCEEDED",
+            "The upload exceeds your storage quota.",
+        )
+
+    file_record = File(
+        user_id=user.id,
+        folder_id=folder_id,
+        original_name=filename,
+        extension=extension,
+        storage_key=storage_key,
+        size=size,
+        mime_type=mime_type,
+        checksum=checksum,
+    )
+    try:
+        db.add(file_record)
+        db.commit()
+        db.refresh(file_record)
+        return file_record
+    except IntegrityError as exc:
+        db.rollback()
+        raise AppError(
+            409,
+            "DUPLICATE_NAME",
+            "A file with this name already exists in that folder.",
+        ) from exc
+    except SQLAlchemyError:
+        db.rollback()
         raise
 
 
