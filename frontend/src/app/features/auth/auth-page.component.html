@@ -4,12 +4,13 @@
     <p class="eyebrow">PRIVATE CLOUD STORAGE</p>
     <h1>{{ mode() === 'login' ? 'Welcome back' : 'Create your vault' }}</h1>
     <p class="muted">{{ mode() === 'login' ? 'Sign in to access your files.' : 'Keep your important files organized and secure.' }}</p>
+    @if (success()) { <p class="success" role="status">{{ success() }}</p> }
     <form (ngSubmit)="submit()" #form="ngForm">
       @if (mode() === 'register') {
-        <label>Name <input name="name" [(ngModel)]="name" required /></label>
+        <label for="auth-name">Name<input id="auth-name" name="name" type="text" autocomplete="name" [(ngModel)]="name" required /></label>
       }
-      <label>Email <input name="email" type="email" [(ngModel)]="email" required /></label>
-      <label>Password <input name="password" type="password" [(ngModel)]="password" minlength="8" required /></label>
+      <label for="auth-email">Email<input id="auth-email" name="email" type="email" autocomplete="email" [(ngModel)]="email" required /></label>
+      <label for="auth-password">Password<input id="auth-password" name="password" type="password" [attr.autocomplete]="mode() === 'login' ? 'current-password' : 'new-password'" [(ngModel)]="password" minlength="8" required /></label>
       @if (error()) { <p class="error">{{ error() }}</p> }
       <button class="primary full" [disabled]="form.invalid || submitting()">
         {{ submitting() ? 'Please wait...' : mode() === 'login' ? 'Sign in' : 'Create account' }}

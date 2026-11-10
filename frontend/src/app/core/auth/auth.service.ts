@@ -36,9 +36,6 @@ export class AuthService {
     this.isBusy.set(true);
     try {
       await this.api.register(name, email, password);
-      const result = await this.api.login(email, password);
-      localStorage.setItem('cloudvault_token', result.access_token);
-      this.user.set(await this.api.user());
     } finally {
       this.isBusy.set(false);
     }

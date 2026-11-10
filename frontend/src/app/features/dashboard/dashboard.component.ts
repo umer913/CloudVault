@@ -1,8 +1,8 @@
-import { Component, effect, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService, getApiErrorMessage, UploadCancelledError } from '../../core/api/api.service';
 import { AuthService } from '../../core/auth/auth.service';
-import { CreatedShare, FileRecord, FolderContents, Share, Usage } from '../../core/models/api.models';
+import { CreatedShare, FileRecord, Folder, FolderContents, FolderTree, Share, Usage } from '../../core/models/api.models';
 
 @Component({
   selector: 'app-dashboard',
@@ -13,7 +13,9 @@ import { CreatedShare, FileRecord, FolderContents, Share, Usage } from '../../co
 export class DashboardComponent {
   readonly auth = inject(AuthService);
   private readonly api = inject(ApiService);
+  readonly viewMode = signal<'all' | 'recent' | 'starred'>('all');
   readonly contents = signal<FolderContents | null>(null);
+  readonly allContents = signal<FolderContents | null>(null);
   readonly usage = signal<Usage | null>(null);
   readonly error = signal('');
   readonly isLoading = signal(false);
@@ -22,11 +24,46 @@ export class DashboardComponent {
   readonly sortField = signal('created_at');
   readonly sortOrder = signal<'asc' | 'desc'>('desc');
   readonly page = signal(1);
-  readonly pageSize = 12;
+  get pageSize() {
+    return this.viewMode() === 'all' ? 4 : 8;
+  }
   readonly totalFiles = signal(0);
+  readonly totalItems = signal(0);
   readonly uploadProgress = signal<number | null>(null);
   readonly uploadPhase = signal('Preparing upload...');
   readonly isUploading = signal(false);
+  readonly isDragActive = signal(false);
+  readonly allFolders = signal<FolderTree[]>([]);
+  readonly libraryFiles = signal<FileRecord[]>([]);
+  readonly starredIds = signal<Set<number>>(new Set());
+  readonly expandedFolders = signal<Set<number>>(new Set());
+  readonly visibleTreeFolders = computed(() => {
+    const folders = this.allFolders();
+    const expanded = this.expandedFolders();
+    const children = new Map<number | null, FolderTree[]>();
+    for (const folder of folders) {
+      const siblings = children.get(folder.parent_id) ?? [];
+      siblings.push(folder);
+      children.set(folder.parent_id, siblings);
+    }
+    const result: Array<
+      | (FolderTree & { depth: number; kind: 'folder' })
+      | { depth: number; kind: 'file'; file: FileRecord }
+    > = [];
+    const visit = (parentId: number | null, depth: number) => {
+      for (const folder of children.get(parentId) ?? []) {
+        result.push({ ...folder, depth, kind: 'folder' });
+        if (expanded.has(folder.id)) {
+          for (const file of folder.files) {
+            result.push({ depth: depth + 1, kind: 'file', file });
+          }
+          visit(folder.id, depth + 1);
+        }
+      }
+    };
+    visit(null, 0);
+    return result;
+  });
   readonly isFolderDialogOpen = signal(false);
   readonly isCreatingFolder = signal(false);
   readonly fileActionId = signal<number | null>(null);
@@ -55,7 +92,14 @@ export class DashboardComponent {
 
   constructor() {
     effect(() => {
-      if (this.auth.user()) void this.refresh();
+      const user = this.auth.user();
+      if (!user) {
+        this.starredIds.set(new Set());
+        return;
+      }
+
+      void this.refresh();
+      this.loadStarredIds(user.id);
     });
   }
 
@@ -70,15 +114,30 @@ export class DashboardComponent {
         type: this.fileType(),
         sort: this.sortField(),
         order: this.sortOrder(),
-        limit: this.pageSize,
-        offset: (this.page() - 1) * this.pageSize,
+        limit: 100,
+        offset: 0,
       };
-      const contents = folderId === null
-        ? await this.api.rootContents(options)
-        : await this.api.folderContents(folderId, options);
-      if (sequence !== this.refreshSequence) return;
-      this.contents.set(contents);
-      this.totalFiles.set(contents.total);
+      if (this.viewMode() === 'all') {
+        const contents = await this.loadAllCurrentContents(folderId, options);
+        const folders = await this.api.folderTree();
+        this.allFolders.set(folders);
+        if (sequence !== this.refreshSequence) return;
+        this.allContents.set(contents);
+        this.updateContentsPage(contents);
+        this.totalFiles.set(contents.total);
+      } else {
+        const [folders, rootFiles] = await Promise.all([
+          this.api.folderTree(),
+          this.loadAllRootFiles(),
+        ]);
+        if (sequence !== this.refreshSequence) return;
+        this.allFolders.set(folders);
+        this.libraryFiles.set([
+          ...rootFiles,
+          ...folders.flatMap((folder) => folder.files),
+        ]);
+        this.updateLibraryContents();
+      }
     } catch (error) {
       if (sequence !== this.refreshSequence) return;
       this.error.set(getApiErrorMessage(error, 'Unable to load files.'));
@@ -98,6 +157,7 @@ export class DashboardComponent {
 
   async openRoot() {
     if (this.isLoading()) return;
+    this.viewMode.set('all');
     this.currentFolder = null;
     this.page.set(1);
     await this.refresh();
@@ -105,9 +165,72 @@ export class DashboardComponent {
 
   async openFolder(id: number) {
     if (this.isLoading()) return;
+    this.viewMode.set('all');
     this.currentFolder = id;
     this.page.set(1);
     await this.refresh();
+  }
+
+  async openFileLocation(file: FileRecord) {
+    if (this.isLoading()) return;
+    this.viewMode.set('all');
+    this.currentFolder = file.folder_id;
+    this.searchQuery.set('');
+    this.fileType.set('');
+    this.sortField.set('created_at');
+    this.sortOrder.set('desc');
+    this.page.set(1);
+    await this.refresh();
+
+    const contents = this.allContents();
+    const fileIndex = contents?.files.findIndex((item) => item.id === file.id) ?? -1;
+    if (!contents || fileIndex < 0) return;
+
+    this.page.set(Math.floor((contents.folders.length + fileIndex) / this.pageSize) + 1);
+    this.updateContentsPage(contents);
+  }
+
+  async openLibraryView(view: 'recent' | 'starred') {
+    if (this.isLoading()) return;
+    this.viewMode.set(view);
+    this.currentFolder = null;
+    this.page.set(1);
+    this.searchQuery.set('');
+    this.fileType.set('');
+    await this.refresh();
+  }
+
+  signOut() {
+    if (window.confirm('Are you sure you want to sign out?')) {
+      this.auth.logout();
+    }
+  }
+
+  toggleStar(file: FileRecord) {
+    const userId = this.auth.user()?.id;
+    if (userId === undefined) return;
+
+    const starred = new Set(this.starredIds());
+    if (starred.has(file.id)) starred.delete(file.id);
+    else starred.add(file.id);
+
+    try {
+      localStorage.setItem(this.starredStorageKey(userId), JSON.stringify([...starred]));
+      this.starredIds.set(starred);
+      if (this.viewMode() === 'starred') {
+        this.page.set(1);
+        this.updateLibraryContents();
+      }
+    } catch (error) {
+      this.error.set(getApiErrorMessage(error, 'Unable to save starred files.'));
+    }
+  }
+
+  toggleFolder(id: number) {
+    const expanded = new Set(this.expandedFolders());
+    if (expanded.has(id)) expanded.delete(id);
+    else expanded.add(id);
+    this.expandedFolders.set(expanded);
   }
 
   onSearchChange(value: string) {
@@ -125,7 +248,12 @@ export class DashboardComponent {
   async changePage(page: number) {
     if (page < 1 || page > this.pageCount() || this.isLoading()) return;
     this.page.set(page);
-    await this.refresh();
+    if (this.viewMode() === 'all') {
+      const contents = this.allContents();
+      if (contents) this.updateContentsPage(contents);
+    } else {
+      this.updateLibraryContents();
+    }
   }
 
   showFolderDialog() {
@@ -332,9 +460,30 @@ export class DashboardComponent {
 
   async upload(event: Event) {
     const file = (event.target as HTMLInputElement).files?.[0];
-    if (!file) return;
     const input = event.target as HTMLInputElement;
     input.value = '';
+    if (file) await this.uploadFile(file);
+  }
+
+  onDragOver(event: DragEvent) {
+    event.preventDefault();
+    if (!this.isUploading()) this.isDragActive.set(true);
+  }
+
+  onDragLeave(event: DragEvent) {
+    event.preventDefault();
+    this.isDragActive.set(false);
+  }
+
+  async onDrop(event: DragEvent) {
+    event.preventDefault();
+    this.isDragActive.set(false);
+    if (this.isUploading()) return;
+    const file = event.dataTransfer?.files[0];
+    if (file) await this.uploadFile(file);
+  }
+
+  private async uploadFile(file: File) {
     if (file.size > this.maxUploadBytes) {
       this.error.set('Files must be 500 MB or smaller.');
       return;
@@ -386,10 +535,20 @@ export class DashboardComponent {
     return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
   }
 
+  pageTitle() {
+    if (this.viewMode() === 'recent') return 'Recent';
+    if (this.viewMode() === 'starred') return 'Starred';
+    return this.contents()?.name || 'My files';
+  }
+
+  isStarred(file: FileRecord) {
+    return this.starredIds().has(file.id);
+  }
+
   trackFile(_index: number, file: FileRecord) { return file.id; }
 
   pageCount() {
-    return Math.max(1, Math.ceil(this.totalFiles() / this.pageSize));
+    return Math.max(1, Math.ceil(this.totalItems() / this.pageSize));
   }
 
   hasPreviousPage() {
@@ -406,6 +565,110 @@ export class DashboardComponent {
 
   shareLink(token: string) {
     return this.api.publicShareUrl(token);
+  }
+
+  private async loadAllRootFiles() {
+    const files: FileRecord[] = [];
+    let offset = 0;
+    let total = 0;
+
+    do {
+      const page = await this.api.listFiles({
+        folderId: null,
+        sort: 'created_at',
+        order: 'desc',
+        limit: 100,
+        offset,
+      });
+      files.push(...page.items);
+      total = page.total;
+      offset += page.items.length;
+      if (!page.items.length) break;
+    } while (offset < total);
+
+    return files;
+  }
+
+  private async loadAllCurrentContents(
+    folderId: number | null,
+    options: Omit<Parameters<ApiService['listFiles']>[0], 'folderId'>,
+  ) {
+    const pageOptions = { ...options, limit: 100, offset: 0 };
+    const contents = folderId === null
+      ? await this.api.rootContents(pageOptions)
+      : await this.api.folderContents(folderId, pageOptions);
+    const files = [...contents.files];
+
+    while (files.length < contents.total) {
+      const page = await this.api.listFiles({
+        ...options,
+        folderId,
+        limit: 100,
+        offset: files.length,
+      });
+      if (!page.items.length) break;
+      files.push(...page.items);
+    }
+
+    return { ...contents, files };
+  }
+
+  private updateContentsPage(contents: FolderContents) {
+    const start = (this.page() - 1) * this.pageSize;
+    const end = start + this.pageSize;
+    const folderEnd = Math.min(end, contents.folders.length);
+    const fileStart = Math.max(0, start - contents.folders.length);
+    const fileEnd = Math.max(0, end - contents.folders.length);
+    this.contents.set({
+      ...contents,
+      folders: contents.folders.slice(Math.min(start, contents.folders.length), folderEnd),
+      files: contents.files.slice(fileStart, fileEnd),
+    });
+    this.totalItems.set(contents.folders.length + contents.files.length);
+  }
+
+  private updateLibraryContents() {
+    const files = this.libraryFiles()
+      .filter((file) => this.viewMode() !== 'starred' || this.starredIds().has(file.id))
+      .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
+    const lastPage = Math.max(1, Math.ceil(files.length / this.pageSize));
+    if (this.page() > lastPage) this.page.set(lastPage);
+    const offset = (this.page() - 1) * this.pageSize;
+    const pageFiles = files.slice(offset, offset + this.pageSize);
+    this.contents.set({
+      id: 0,
+      name: this.pageTitle(),
+      parent_id: null,
+      created_at: new Date(0).toISOString(),
+      breadcrumbs: [],
+      folders: [],
+      files: pageFiles,
+      total: files.length,
+    });
+    this.totalFiles.set(files.length);
+    this.totalItems.set(files.length);
+  }
+
+  private loadStarredIds(userId: number) {
+    try {
+      const saved = localStorage.getItem(this.starredStorageKey(userId));
+      const parsed: unknown = saved ? JSON.parse(saved) : [];
+      if (!Array.isArray(parsed)) {
+        throw new Error('Saved starred files are invalid.');
+      }
+      const ids = parsed.filter(
+        (id: unknown): id is number => typeof id === 'number' && Number.isInteger(id) && id > 0,
+      );
+      if (ids.length !== parsed.length) throw new Error('Saved starred files are invalid.');
+      this.starredIds.set(new Set(ids));
+    } catch (error) {
+      this.starredIds.set(new Set());
+      this.error.set(getApiErrorMessage(error, 'Unable to load starred files.'));
+    }
+  }
+
+  private starredStorageKey(userId: number) {
+    return `cloudvault_starred_${userId}`;
   }
 
   private defaultExpiry() {

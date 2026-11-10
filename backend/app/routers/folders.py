@@ -1,15 +1,18 @@
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.errors import AppError
-from app.models import User
+from app.models import File, Folder, User
 from app.schemas.folders import (
     FolderContentsOut,
     FolderCreateIn,
     FolderOut,
     FolderPatchIn,
+    FolderTreeOut,
 )
+from app.schemas.files import FileOut
 from app.services.folder_service import (
     create_folder,
     delete_folder,
@@ -50,6 +53,36 @@ def list_children(
     user: User = Depends(get_current_user),
 ) -> list[FolderOut]:
     return list_folders(db, user, parent_id=parent_id)
+
+
+@router.get("/tree", response_model=list[FolderTreeOut])
+def list_tree(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[FolderTreeOut]:
+    folders = list(db.scalars(
+        select(Folder)
+        .where(Folder.user_id == user.id)
+        .order_by(Folder.parent_id.asc(), Folder.name.asc(), Folder.id.asc())
+    ))
+    files = list(db.scalars(
+        select(File)
+        .where(File.user_id == user.id, File.folder_id.is_not(None))
+        .order_by(File.original_name.asc(), File.id.asc())
+    ))
+    files_by_folder: dict[int, list[File]] = {}
+    for file in files:
+        files_by_folder.setdefault(file.folder_id, []).append(file)
+    return [
+        FolderTreeOut(
+            **FolderOut.model_validate(folder).model_dump(),
+            files=[
+                FileOut.model_validate(file)
+                for file in files_by_folder.get(folder.id, [])
+            ],
+        )
+        for folder in folders
+    ]
 
 
 @router.get("/{folder_id}", response_model=FolderContentsOut)

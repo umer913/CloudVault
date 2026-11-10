@@ -1,14 +1,41 @@
 <div class="app-shell">
   <aside class="sidebar">
     <div class="brand"><span class="brand-mark small">C</span><strong>CloudVault</strong></div>
-    <nav><button class="nav-item active" type="button">▦ <span>My files</span></button><button class="nav-item" type="button" (click)="showShares()">↗ <span>Shared links</span></button></nav>
+    <nav class="sidebar-nav">
+      <button class="tree-root" type="button" (click)="openRoot()"><span class="tree-icon folder-icon" aria-hidden="true"></span><strong>All files</strong><span class="tree-count">{{ totalFiles() }}</span><span class="tree-chevron">⌃</span></button>
+      <div class="folder-tree">
+        @for (item of visibleTreeFolders(); track item.kind === 'folder' ? item.id : item.file.id) {
+          @if (item.kind === 'folder') {
+            <div class="tree-folder-row" [style.padding-left.px]="8 + item.depth * 18">
+              <button class="tree-toggle" type="button" [attr.aria-label]="expandedFolders().has(item.id) ? 'Collapse folder' : 'Expand folder'" (click)="toggleFolder(item.id)">{{ expandedFolders().has(item.id) ? '⌄' : '›' }}</button>
+              <button class="tree-folder" [class.selected]="contents()?.id === item.id" type="button" (click)="openFolder(item.id)"><span class="tree-icon folder-icon" aria-hidden="true"></span><span>{{ item.name }}</span></button>
+            </div>
+          } @else {
+            <div class="tree-file-row" [style.padding-left.px]="28 + item.depth * 18">
+              <button class="tree-file" type="button" (click)="openFileLocation(item.file)"><span class="file-icon tree-file-icon" aria-hidden="true"></span><span>{{ item.file.original_name }}</span></button>
+              <button class="tree-star" type="button" [class.starred]="isStarred(item.file)" [attr.aria-label]="isStarred(item.file) ? 'Remove from Starred' : 'Add to Starred'" [attr.aria-pressed]="isStarred(item.file)" (click)="toggleStar(item.file)">{{ isStarred(item.file) ? '★' : '☆' }}</button>
+            </div>
+          }
+        }
+      </div>
+      <button class="nav-item sidebar-link" type="button" (click)="showShares()">↗ <span>Shared links</span></button>
+    </nav>
+    <div class="sidebar-links">
+      <button class="sidebar-link" [class.active]="viewMode() === 'recent'" type="button" (click)="openLibraryView('recent')">◷ <span>Recent</span></button>
+      <button class="sidebar-link" [class.active]="viewMode() === 'starred'" type="button" (click)="openLibraryView('starred')">☆ <span>Starred</span></button>
+    </div>
     <div class="sidebar-bottom">
       <div class="profile"><div class="avatar">{{ auth.user()!.name.charAt(0).toUpperCase() }}</div><div><strong>{{ auth.user()!.name }}</strong><span>{{ auth.user()!.email }}</span></div></div>
-      <button class="logout" type="button" (click)="auth.logout()">Sign out</button>
+      <button class="logout" type="button" (click)="signOut()">Sign out</button>
     </div>
   </aside>
   <main class="content">
-    <header><div><p class="eyebrow">YOUR WORKSPACE</p><h1>My files</h1></div><div class="header-actions"><button class="secondary-button" type="button" (click)="showFolderDialog()">+ New folder</button><label class="upload-button" [class.disabled]="isUploading()">+ Upload files<input type="file" [disabled]="isUploading()" (change)="upload($event)" /></label></div></header>
+    <header><div><p class="eyebrow">YOUR WORKSPACE</p><h1>{{ pageTitle() }}</h1></div>@if (viewMode() === 'all') {<div class="header-actions"><button class="secondary-button" type="button" (click)="showFolderDialog()">+ New folder</button><label class="upload-button" [class.disabled]="isUploading()">+ Upload files<input type="file" [disabled]="isUploading()" (change)="upload($event)" /></label></div>}</header>
+    @if (viewMode() === 'all') {
+      <section class="drop-zone" [class.drag-active]="isDragActive()" [class.disabled]="isUploading()" (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)" (drop)="onDrop($event)">
+        <span class="drop-icon">↑</span><div><strong>Drop files here to upload</strong><span>or use the Upload files button above</span></div>
+      </section>
+    }
     @if (isUploading()) {
       <section class="upload-status" aria-live="polite">
         <div class="upload-status-heading"><strong>{{ uploadPhase() }}</strong>@if (uploadProgress() !== null) {<span>{{ uploadProgress() }}%</span>} @else {<span>In progress</span>}</div>
@@ -16,25 +43,37 @@
         <div class="upload-status-footer"><span class="muted">Large files may take time while they are being transferred to storage. Keep this window open.</span><button class="secondary-button" type="button" (click)="cancelUpload()">Cancel</button></div>
       </section>
     }
-    @if (usage(); as storage) {
-      <section class="usage-card"><div><span class="muted">Storage used</span><strong>{{ formatBytes(storage.used_bytes) }} <small>of {{ formatBytes(storage.quota_bytes) }}</small></strong></div><div class="progress"><span [style.width.%]="storage.percent_used"></span></div><span class="muted">{{ storage.percent_used }}% used</span></section>
+    @if (viewMode() === 'all' && usage(); as storage) {
+      <section class="usage-card">
+        <div class="usage-summary">
+          <div class="usage-donut" [style.background]="'conic-gradient(var(--cv-primary) ' + storage.percent_used + '%, #e8edf5 0)'">
+            <div class="usage-donut-center"><strong>{{ storage.percent_used }}%</strong><span>used</span></div>
+          </div>
+          <div class="usage-details"><span class="muted">Storage used</span><strong>{{ formatBytes(storage.used_bytes) }}</strong><span class="muted">of {{ formatBytes(storage.quota_bytes) }}</span></div>
+        </div>
+        <div class="summary-cards">
+          <div class="summary-card"><span class="summary-card-icon files-icon">▤</span><div><span class="muted">Total files</span><strong>{{ totalFiles() }}</strong></div></div>
+          <div class="summary-card"><span class="summary-card-icon available-icon">✓</span><div><span class="muted">Available space</span><strong>{{ formatBytes(storage.remaining_bytes) }}</strong></div></div>
+          <div class="summary-card"><span class="summary-card-icon folder-summary-icon">▰</span><div><span class="muted">Current location</span><strong>{{ contents()?.name || 'My files' }}</strong></div></div>
+        </div>
+      </section>
     }
     @if (error()) { <div class="error-banner">{{ error() }}</div> }
-    <div class="toolbar"><div class="breadcrumbs"><button type="button" [disabled]="isLoading()" (click)="openRoot()">My files</button>@for (crumb of contents()?.breadcrumbs; track crumb.id) {<span> / <button type="button" [disabled]="isLoading()" (click)="openFolder(crumb.id)">{{ crumb.name }}</button></span>}</div><span class="muted">{{ totalFiles() }} files</span></div>
-    <section class="file-tools">
+    <div class="toolbar"><span class="muted">{{ totalFiles() }} files</span></div>
+    @if (viewMode() === 'all') {<section class="file-tools">
       <label class="search-box">Search files<input type="search" [value]="searchQuery()" (input)="onSearchChange($any($event.target).value)" placeholder="Search by filename" /></label>
       <label>Type<select [value]="fileType()" (change)="fileType.set($any($event.target).value); changeFilter()"><option value="">All types</option><option value="documents">Documents</option><option value="images">Images</option><option value="archives">Archives</option><option value="data">Data</option></select></label>
       <label>Sort<select [value]="sortField()" (change)="sortField.set($any($event.target).value); changeFilter()"><option value="created_at">Date added</option><option value="name">Name</option><option value="size">Size</option></select></label>
       <button class="secondary-button sort-order" type="button" (click)="sortOrder.set(sortOrder() === 'asc' ? 'desc' : 'asc'); changeFilter()">{{ sortOrder() === 'asc' ? 'Ascending' : 'Descending' }}</button>
-    </section>
+    </section>}
     <section class="file-grid" [class.is-loading]="isLoading()">
       @if (isLoading()) {
         <div class="loading-panel" aria-live="polite"><span class="spinner"></span><strong>Loading folder...</strong><span class="muted">Fetching your files and folders</span></div>
       }
       @if (!isLoading()) {
       @for (folder of contents()?.folders; track folder.id) {<div class="file-card folder-card"><button class="folder-main" type="button" [disabled]="isLoading() || !!folderActionId()" (click)="openFolder(folder.id)"><span class="file-icon folder">▰</span><strong>{{ folder.name }}</strong><span class="muted">Folder</span></button><div class="file-actions"><button type="button" (click)="showFolderRenameDialog(folder.id, folder.name)">Rename</button><button type="button" class="danger" (click)="deleteFolder(folder.id, folder.name)">Delete</button></div></div>}
-      @for (file of contents()?.files; track trackFile($index, file)) {<div class="file-card"><span class="file-icon">{{ file.extension.toUpperCase() }}</span><strong>{{ file.original_name }}</strong><span class="muted">{{ formatBytes(file.size) }}</span><div class="file-actions"><button type="button" (click)="downloadFile(file)">Download</button>@if (['pdf','png','jpg','jpeg','txt'].includes(file.extension)) {<button type="button" (click)="downloadFile(file, true)">Preview</button>}<button type="button" (click)="showShareDialog(file)">Share</button><button type="button" (click)="showRenameDialog(file)">Rename</button><button type="button" class="danger" (click)="deleteFile(file)">Delete</button></div></div>}
-      @if (!contents()?.folders?.length && !contents()?.files?.length) {<div class="empty"><span>✦</span><h2>This space is yours</h2><p>Upload a file to start building your vault.</p></div>}
+      @for (file of contents()?.files; track trackFile($index, file)) {<div class="file-card"><button class="star-button" type="button" [class.starred]="isStarred(file)" [attr.aria-label]="isStarred(file) ? 'Remove from Starred' : 'Add to Starred'" [attr.aria-pressed]="isStarred(file)" (click)="toggleStar(file)">{{ isStarred(file) ? '★' : '☆' }}</button><span class="file-icon">{{ file.extension.toUpperCase() }}</span><strong>{{ file.original_name }}</strong><span class="muted">{{ formatBytes(file.size) }}</span><div class="file-actions"><button type="button" (click)="downloadFile(file)">Download</button>@if (['pdf','png','jpg','jpeg','txt'].includes(file.extension)) {<button type="button" (click)="downloadFile(file, true)">Preview</button>}<button type="button" (click)="showShareDialog(file)">Share</button><button type="button" (click)="showRenameDialog(file)">Rename</button><button type="button" class="danger" (click)="deleteFile(file)">Delete</button></div></div>}
+      @if (!contents()?.folders?.length && !contents()?.files?.length) {<div class="empty"><span>✦</span><h2>{{ viewMode() === 'starred' ? 'No starred files yet' : viewMode() === 'recent' ? 'No recent files yet' : 'This space is yours' }}</h2><p>{{ viewMode() === 'starred' ? 'Star a file to keep it easy to find.' : viewMode() === 'recent' ? 'Recently added files will appear here.' : 'Upload a file to start building your vault.' }}</p></div>}
       }
       @if (isRenameDialogOpen()) {
         <div class="modal-backdrop" (click)="closeRenameDialog()">
@@ -82,7 +121,7 @@
         </div>
       }
     </section>
-    @if (!isLoading() && totalFiles() > 0) {
+    @if (!isLoading() && totalItems() > pageSize) {
       <div class="pagination"><button class="secondary-button" type="button" [disabled]="!hasPreviousPage()" (click)="changePage(page() - 1)">Previous</button><span class="muted">Page {{ page() }} of {{ pageCount() }}</span><button class="secondary-button" type="button" [disabled]="!hasNextPage()" (click)="changePage(page() + 1)">Next</button></div>
     }
   </main>

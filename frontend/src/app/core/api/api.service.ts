@@ -1,7 +1,7 @@
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { CreatedShare, FileList, FileRecord, Folder, FolderContents, Share, Usage, User } from '../models/api.models';
+import { CreatedShare, FileList, FileRecord, Folder, FolderContents, FolderTree, Share, Usage, User } from '../models/api.models';
 import { environment } from '../../../environments/environment';
 
 export function getApiErrorMessage(error: unknown, fallback = 'Request failed.') {
@@ -42,6 +42,10 @@ export class ApiService {
   user() { return firstValueFrom(this.http.get<User>(`${this.baseUrl}/api/auth/me`)); }
   usage() { return firstValueFrom(this.http.get<Usage>(`${this.baseUrl}/api/storage/usage`)); }
 
+  folderTree() {
+    return firstValueFrom(this.http.get<FolderTree[]>(`${this.baseUrl}/api/folders/tree`));
+  }
+
   listFiles(options: {
     folderId: number | null;
     query?: string;
@@ -70,6 +74,7 @@ export class ApiService {
       id: 0,
       name: 'My files',
       parent_id: null,
+      created_at: new Date(0).toISOString(),
       breadcrumbs: [],
       folders,
       files: files.items,

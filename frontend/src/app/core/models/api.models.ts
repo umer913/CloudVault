@@ -10,6 +10,11 @@ export type Folder = {
   id: number;
   name: string;
   parent_id: number | null;
+  created_at: string;
+};
+
+export type FolderTree = Folder & {
+  files: FileRecord[];
 };
 
 export type FileRecord = {
@@ -19,7 +24,9 @@ export type FileRecord = {
   mime_type: string;
   extension: string;
   folder_id: number | null;
+  checksum: string;
   created_at: string;
+  updated_at: string;
 };
 
 export type Usage = {
@@ -33,6 +40,7 @@ export type FolderContents = {
   id: number;
   name: string;
   parent_id: number | null;
+  created_at: string;
   breadcrumbs: Folder[];
   folders: Folder[];
   files: FileRecord[];

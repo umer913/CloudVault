@@ -27,3 +27,7 @@ class FolderContentsOut(FolderOut):
     breadcrumbs: list[FolderOut]
     folders: list[FolderOut]
     files: list[FileOut]
+
+
+class FolderTreeOut(FolderOut):
+    files: list[FileOut]
