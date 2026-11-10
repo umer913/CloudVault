@@ -25,6 +25,11 @@ app.add_middleware(
 )
 
 
+@app.get("/health", tags=["health"])
+def health_check() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
