@@ -9,6 +9,10 @@ const apiMock = {
   folderContents: vi.fn(),
   usage: vi.fn(),
   listFiles: vi.fn(),
+  regenerateShareLink: vi.fn(),
+  listShares: vi.fn(),
+  getFile: vi.fn(),
+  publicShareUrl: vi.fn((token: string) => `https://cloudvault.example/api/public/share/${token}/content`),
 };
 
 const authMock = {
@@ -44,31 +48,59 @@ describe('DashboardComponent', () => {
     const component = TestBed.createComponent(DashboardComponent).componentInstance;
     component.totalItems.set(25);
 
-    expect(component.pageSize).toBe(4);
-    expect(component.pageCount()).toBe(7);
+    expect(component.pageSize).toBe(12);
+    expect(component.pageCount()).toBe(3);
     expect(component.hasPreviousPage()).toBe(false);
     expect(component.hasNextPage()).toBe(true);
 
-    component.page.set(7);
+    component.page.set(3);
     expect(component.hasPreviousPage()).toBe(true);
     expect(component.hasNextPage()).toBe(false);
   });
 
-  it('allows eight files per page in Recent and Starred', () => {
+  it('uses a consistent title instead of the selected folder name', () => {
+    const component = TestBed.createComponent(DashboardComponent).componentInstance;
+    component.contents.set({
+      id: 8,
+      name: 'MyFolder',
+      parent_id: null,
+      created_at: '2026-11-10T00:00:00Z',
+      breadcrumbs: [],
+      folders: [],
+      files: [],
+      total: 0,
+    });
+
+    expect(component.pageTitle()).toBe('My Files');
+    component.viewMode.set('recent');
+    expect(component.pageTitle()).toBe('Recent');
+    component.viewMode.set('starred');
+    expect(component.pageTitle()).toBe('Starred');
+  });
+
+  it('keeps file type badges compact for arbitrary extensions', () => {
+    const component = TestBed.createComponent(DashboardComponent).componentInstance;
+
+    expect(component.fileTypeLabel('app')).toBe('APP');
+    expect(component.fileTypeLabel('verylongextension')).toBe('VERY');
+    expect(component.fileTypeLabel('')).toBe('FILE');
+  });
+
+  it('uses the same 12-item page size in Recent and Starred', () => {
     const component = TestBed.createComponent(DashboardComponent).componentInstance;
 
     component.viewMode.set('recent');
     component.totalItems.set(17);
-    expect(component.pageSize).toBe(8);
-    expect(component.pageCount()).toBe(3);
+    expect(component.pageSize).toBe(12);
+    expect(component.pageCount()).toBe(2);
 
     component.viewMode.set('starred');
-    expect(component.pageSize).toBe(8);
+    expect(component.pageSize).toBe(12);
   });
 
   it('does not navigate outside the available pages', async () => {
     const component = TestBed.createComponent(DashboardComponent).componentInstance;
-    component.totalItems.set(4);
+    component.totalItems.set(12);
     const refresh = vi.spyOn(component, 'refresh').mockResolvedValue();
 
     await component.changePage(2);
@@ -78,22 +110,116 @@ describe('DashboardComponent', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it('limits each page to four cards across folders and files', async () => {
+  it('opens and closes the mobile navigation', () => {
     const component = TestBed.createComponent(DashboardComponent).componentInstance;
-    component.totalItems.set(9);
+
+    component.toggleMobileNav();
+    expect(component.isMobileNavOpen()).toBe(true);
+
+    component.onEscape();
+    expect(component.isMobileNavOpen()).toBe(false);
+
+    component.toggleMobileNav();
+    component.toggleMobileNav();
+    expect(component.isMobileNavOpen()).toBe(false);
+  });
+
+  it('shows errors in a themed alert dialog and allows dismissal', () => {
+    const fixture = TestBed.createComponent(DashboardComponent);
+    const component = fixture.componentInstance;
+    authMock.user.set({
+      id: 42,
+      name: 'Test User',
+      email: 'test@example.com',
+      storage_quota: 1000,
+      used_bytes: 0,
+    });
+    vi.spyOn(component, 'refresh').mockResolvedValue();
+    component.error.set('Files must be 500 MB or smaller.');
+    fixture.detectChanges();
+
+    const alert = fixture.nativeElement.querySelector('[role="alertdialog"]');
+    expect(alert).not.toBeNull();
+    expect(alert.textContent).toContain('Files must be 500 MB or smaller.');
+    expect(alert.textContent).toContain('This file is too large');
+
+    component.onEscape();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[role="alertdialog"]')).toBeNull();
+  });
+
+  it('provides a specific title and next step for API connection errors', () => {
+    const component = TestBed.createComponent(DashboardComponent).componentInstance;
+    component.error.set("Couldn't connect to CloudVault. Check your internet connection and confirm the server is available.");
+
+    expect(component.errorTitle()).toBe('CloudVault is unreachable');
+    expect(component.errorGuidance()).toContain('confirm the CloudVault server is online');
+  });
+
+  it('creates a fresh shared URL and keeps it visible when clipboard access is unavailable', async () => {
+    const component = TestBed.createComponent(DashboardComponent).componentInstance;
+    const share = {
+      id: 12,
+      file_id: 25,
+      original_name: 'Quarterly report.pdf',
+      permission: 'download' as const,
+      expires_at: '2026-11-18T11:16:00Z',
+      revoked_at: null,
+      created_at: '2026-11-11T11:16:00Z',
+    };
+    apiMock.regenerateShareLink.mockResolvedValue({ ...share, token: 'fresh-token' });
+
+    await component.regenerateAndCopyShareLink(share);
+
+    expect(apiMock.regenerateShareLink).toHaveBeenCalledWith(12);
+    expect(component.shareLinks().get(12)).toBe(
+      'https://cloudvault.example/api/public/share/fresh-token/content',
+    );
+    expect(component.shareLinkStatus()?.shareId).toBe(12);
+  });
+
+  it('loads filenames for shared links from older API responses', async () => {
+    const component = TestBed.createComponent(DashboardComponent).componentInstance;
+    apiMock.listShares.mockResolvedValue([{
+      id: 8,
+      file_id: 25,
+      permission: 'download',
+      expires_at: '2026-11-18T11:16:00Z',
+      revoked_at: null,
+      created_at: '2026-11-11T11:16:00Z',
+    }]);
+    apiMock.getFile.mockResolvedValue({ original_name: 'Counter-Strike 2.zip' });
+
+    await component.loadShares();
+
+    expect(apiMock.getFile).toHaveBeenCalledWith(25);
+    expect(component.shares()[0].original_name).toBe('Counter-Strike 2.zip');
+  });
+
+  it('explains upload size errors with a clear next step', () => {
+    const component = TestBed.createComponent(DashboardComponent).componentInstance;
+    component.error.set('Files must be 500 MB or smaller.');
+
+    expect(component.errorTitle()).toBe('This file is too large');
+    expect(component.errorGuidance()).toBe('Choose a file smaller than 500 MB.');
+  });
+
+  it('limits each page to 12 cards across folders and files', async () => {
+    const component = TestBed.createComponent(DashboardComponent).componentInstance;
+    component.totalItems.set(25);
     component.allContents.set({
       id: 0,
       name: 'My files',
       parent_id: null,
       created_at: '2026-11-10T00:00:00Z',
       breadcrumbs: [],
-      folders: Array.from({ length: 5 }, (_, id) => ({
+      folders: Array.from({ length: 16 }, (_, id) => ({
         id: id + 1,
         name: `Folder ${id + 1}`,
         parent_id: null,
         created_at: '2026-11-10T00:00:00Z',
       })),
-      files: Array.from({ length: 4 }, (_, id) => ({
+      files: Array.from({ length: 9 }, (_, id) => ({
         id: id + 1,
         original_name: `file-${id + 1}.txt`,
         size: 12,
@@ -104,14 +230,14 @@ describe('DashboardComponent', () => {
         created_at: '2026-11-10T00:00:00Z',
         updated_at: '2026-11-10T00:00:00Z',
       })),
-      total: 4,
+      total: 25,
     });
 
     await component.changePage(2);
 
-    expect(component.contents()?.folders).toHaveLength(1);
-    expect(component.contents()?.files).toHaveLength(3);
-    expect((component.contents()?.folders.length ?? 0) + (component.contents()?.files.length ?? 0)).toBe(4);
+    expect(component.contents()?.folders).toHaveLength(4);
+    expect(component.contents()?.files).toHaveLength(8);
+    expect((component.contents()?.folders.length ?? 0) + (component.contents()?.files.length ?? 0)).toBe(12);
   });
 
   it('opens the containing folder and page for a file selected in the sidebar', async () => {
@@ -133,7 +259,7 @@ describe('DashboardComponent', () => {
       parent_id: null,
       created_at: '2026-11-10T00:00:00Z',
       breadcrumbs: [],
-      folders: Array.from({ length: 5 }, (_, id) => ({
+      folders: Array.from({ length: 11 }, (_, id) => ({
         id: id + 1,
         name: `Subfolder ${id + 1}`,
         parent_id: 8,
@@ -156,7 +282,7 @@ describe('DashboardComponent', () => {
     expect(component.viewMode()).toBe('all');
     expect(component.page()).toBe(2);
     expect(component.contents()?.files).toContainEqual(targetFile);
-    expect(component.contents()?.folders).toHaveLength(1);
+    expect(component.contents()?.folders).toHaveLength(0);
   });
 
   it('persists starred files for the signed-in user', () => {

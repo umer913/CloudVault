@@ -8,7 +8,12 @@ export function getApiErrorMessage(error: unknown, fallback = 'Request failed.')
   if (error instanceof HttpErrorResponse) {
     const message = error.error?.message;
     if (typeof message === 'string' && message) return message;
-    if (error.status === 0) return 'Cannot connect to the CloudVault API.';
+    if (error.status === 0) {
+      if (error.url?.includes('/api/')) {
+        return "Couldn't connect to CloudVault. Check your internet connection and confirm the server is available.";
+      }
+      return 'The file transfer was interrupted. Check your connection and try the upload again.';
+    }
   }
   return error instanceof Error && error.message ? error.message : fallback;
 }
@@ -118,6 +123,10 @@ export class ApiService {
     return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/api/files/${id}`));
   }
 
+  getFile(id: number) {
+    return firstValueFrom(this.http.get<FileRecord>(`${this.baseUrl}/api/files/${id}`));
+  }
+
   createShare(fileId: number, permission: Share['permission'], expiresAt: string, password?: string) {
     return firstValueFrom(this.http.post<CreatedShare>(`${this.baseUrl}/api/shares`, {
       file_id: fileId,
@@ -129,6 +138,13 @@ export class ApiService {
 
   listShares() {
     return firstValueFrom(this.http.get<Share[]>(`${this.baseUrl}/api/shares`));
+  }
+
+  regenerateShareLink(id: number) {
+    return firstValueFrom(this.http.post<CreatedShare>(
+      `${this.baseUrl}/api/shares/${id}/link`,
+      {},
+    ));
   }
 
   revokeShare(id: number) {

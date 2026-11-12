@@ -21,6 +21,7 @@ class ShareOut(BaseModel):
 
     id: int
     file_id: int
+    original_name: str
     permission: str
     expires_at: datetime
     revoked_at: datetime | None

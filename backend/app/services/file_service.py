@@ -19,6 +19,7 @@ from app.services.supabase_storage_service import (
 )
 from app.utils.validation import (
     ValidatedUpload,
+    file_extension,
     sanitize_filename,
     validate_upload,
 )
@@ -31,13 +32,6 @@ _TYPE_EXTENSIONS = {
     "archives": {"zip"},
     "data": {"csv", "json"},
 }
-_EXTENSION_TYPES = {
-    extension: file_type
-    for file_type, extensions in _TYPE_EXTENSIONS.items()
-    for extension in extensions
-}
-
-
 def list_files(
     db: Session,
     user: User,
@@ -104,16 +98,8 @@ def update_file(
 
     if name is not None:
         validated_name = sanitize_filename(name)
-        new_extension = validated_name.rsplit(".", 1)[-1].lower()
-        if _EXTENSION_TYPES.get(new_extension) != _EXTENSION_TYPES.get(
-            record.extension
-        ):
-            raise AppError(
-                422,
-                "UNSUPPORTED_TYPE",
-                "The renamed file must keep the same file type.",
-            )
         changes["original_name"] = validated_name
+        changes["extension"] = file_extension(validated_name)
 
     if folder_id_provided:
         if folder_id is not None:

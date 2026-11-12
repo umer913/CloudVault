@@ -59,6 +59,7 @@ def test_share_can_be_read_publicly_and_downloaded(
 
     created = _create_share(client, headers, uploaded["id"])
     assert created.status_code == 201, created.text
+    assert created.json()["original_name"] == "notes.txt"
     token = created.json()["token"]
 
     metadata = client.get(f"/api/public/share/{token}")
@@ -69,6 +70,9 @@ def test_share_can_be_read_publicly_and_downloaded(
     assert content.status_code == 200
     assert content.content == b"shared content"
     assert "attachment" in content.headers["content-disposition"]
+    listed = client.get("/api/shares", headers=headers)
+    assert listed.status_code == 200
+    assert listed.json()[0]["original_name"] == "notes.txt"
 
 
 def test_password_protected_share_requires_valid_password(
@@ -112,6 +116,26 @@ def test_revoked_share_is_not_publicly_available(client, make_user, monkeypatch)
     listed = client.get("/api/shares", headers=headers)
     assert listed.status_code == 200
     assert listed.json() == []
+
+
+def test_share_link_can_be_regenerated_and_invalidates_previous_token(
+    client, make_user, monkeypatch
+):
+    headers, _ = make_user()
+    uploaded = _upload_text(client, headers, monkeypatch)
+    created = _create_share(client, headers, uploaded["id"])
+    old_token = created.json()["token"]
+
+    regenerated = client.post(
+        f"/api/shares/{created.json()['id']}/link",
+        headers=headers,
+    )
+
+    assert regenerated.status_code == 200
+    new_token = regenerated.json()["token"]
+    assert new_token != old_token
+    assert client.get(f"/api/public/share/{old_token}").status_code == 404
+    assert client.get(f"/api/public/share/{new_token}").status_code == 200
 
 
 def test_share_expiry_must_be_future_and_within_thirty_days(

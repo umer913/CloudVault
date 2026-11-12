@@ -41,13 +41,23 @@ Schedule that command with the server's task scheduler or cron.
 
 ## Development server
 
-To start a local development server, run:
+Start the local frontend with the production backend (default):
 
 ```bash
-ng serve
+npm start
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+To use the local backend instead:
+
+```bash
+npm run start:local
+```
+
+Both commands serve the frontend at `http://localhost:4200/`. The default
+proxies API requests to the production API; the local option proxies them to
+`http://127.0.0.1:8000` and requires the backend to be running. Production
+builds continue to use the production API directly. No environment file edits
+are needed to switch between the options.
 
 ## Code scaffolding
 

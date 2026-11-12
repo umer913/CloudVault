@@ -16,8 +16,8 @@ cold starts.
      frontend or commit it to the repository.
    - `SECRET_KEY`: a long, random signing key, kept only in Render's environment.
    - `FRONTEND_ORIGIN`: the deployed Vercel origin, with no trailing slash.
-3. If this is a new database, apply the schema migrations against the target
-   database before using the API:
+3. Before deploying a release that adds or changes a migration, apply all
+   pending schema migrations against the target database:
 
    ```sh
    cd backend
@@ -39,9 +39,14 @@ After Render gives the API its public URL, set
 the frontend to Vercel. If the Vercel origin changes, update `FRONTEND_ORIGIN`
 in Render and restart/redeploy the API.
 
-## Limitations to verify
+## Upload behavior
 
-Render Free services sleep after inactivity. Verify the app's large-file upload
-and validation flow against the deployed service before relying on it; the API
-currently allows uploads up to 500 MB, and long-running requests may be affected
-by the host's request limits.
+Uploads accept any file extension. The file is stored as an attachment, with
+preview limited to supported safe formats. The current maximum file size is
+500 MB, subject to the user's available storage quota. A macOS `.app` is a
+package directory rather than a single file; compress it to an archive before
+uploading the complete app.
+
+Render Free services sleep after inactivity. Verify large-file uploads against
+the deployed service; long-running requests may be affected by the host's
+request limits.

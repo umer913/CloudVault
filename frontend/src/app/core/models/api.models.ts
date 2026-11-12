@@ -57,6 +57,7 @@ export type FileList = {
 export type Share = {
   id: number;
   file_id: number;
+  original_name?: string;
   permission: 'view' | 'download';
   expires_at: string;
   revoked_at: string | null;

@@ -14,7 +14,7 @@ class UploadSession(Base):
     storage_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     provider_upload_id: Mapped[str] = mapped_column(String(255), nullable=False)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
-    extension: Mapped[str] = mapped_column(String(10), nullable=False)
+    extension: Mapped[str] = mapped_column(String(255), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(150), nullable=False)
     size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     folder_id: Mapped[int | None] = mapped_column(

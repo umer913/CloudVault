@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, computed, effect, inject, signal, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService, getApiErrorMessage, UploadCancelledError } from '../../core/api/api.service';
 import { AuthService } from '../../core/auth/auth.service';
@@ -11,9 +11,12 @@ import { CreatedShare, FileRecord, Folder, FolderContents, FolderTree, Share, Us
   styleUrl: './dashboard.component.scss',
 })
 export class DashboardComponent {
+  @ViewChild('mobileNavToggle') private mobileNavToggle?: ElementRef<HTMLButtonElement>;
+  @ViewChild('mobileNavFirstItem') private mobileNavFirstItem?: ElementRef<HTMLButtonElement>;
   readonly auth = inject(AuthService);
   private readonly api = inject(ApiService);
   readonly viewMode = signal<'all' | 'recent' | 'starred'>('all');
+  readonly isMobileNavOpen = signal(false);
   readonly contents = signal<FolderContents | null>(null);
   readonly allContents = signal<FolderContents | null>(null);
   readonly usage = signal<Usage | null>(null);
@@ -24,9 +27,7 @@ export class DashboardComponent {
   readonly sortField = signal('created_at');
   readonly sortOrder = signal<'asc' | 'desc'>('desc');
   readonly page = signal(1);
-  get pageSize() {
-    return this.viewMode() === 'all' ? 4 : 8;
-  }
+  readonly pageSize = 12;
   readonly totalFiles = signal(0);
   readonly totalItems = signal(0);
   readonly uploadProgress = signal<number | null>(null);
@@ -75,6 +76,9 @@ export class DashboardComponent {
   readonly shareResult = signal<CreatedShare | null>(null);
   readonly isSharing = signal(false);
   readonly isLoadingShares = signal(false);
+  readonly regeneratingShareId = signal<number | null>(null);
+  readonly shareLinks = signal<Map<number, string>>(new Map());
+  readonly shareLinkStatus = signal<{ shareId: number; message: string } | null>(null);
   readonly shareTarget = signal<FileRecord | null>(null);
   readonly renameTarget = signal<FileRecord | null>(null);
   readonly folderRenameTarget = signal<number | null>(null);
@@ -156,6 +160,7 @@ export class DashboardComponent {
   }
 
   async openRoot() {
+    this.closeMobileNav();
     if (this.isLoading()) return;
     this.viewMode.set('all');
     this.currentFolder = null;
@@ -164,6 +169,7 @@ export class DashboardComponent {
   }
 
   async openFolder(id: number) {
+    this.closeMobileNav();
     if (this.isLoading()) return;
     this.viewMode.set('all');
     this.currentFolder = id;
@@ -172,6 +178,7 @@ export class DashboardComponent {
   }
 
   async openFileLocation(file: FileRecord) {
+    this.closeMobileNav();
     if (this.isLoading()) return;
     this.viewMode.set('all');
     this.currentFolder = file.folder_id;
@@ -191,6 +198,7 @@ export class DashboardComponent {
   }
 
   async openLibraryView(view: 'recent' | 'starred') {
+    this.closeMobileNav();
     if (this.isLoading()) return;
     this.viewMode.set(view);
     this.currentFolder = null;
@@ -201,9 +209,71 @@ export class DashboardComponent {
   }
 
   signOut() {
+    this.closeMobileNav();
     if (window.confirm('Are you sure you want to sign out?')) {
       this.auth.logout();
     }
+  }
+
+  toggleMobileNav() {
+    if (this.isMobileNavOpen()) {
+      this.closeMobileNav();
+      return;
+    }
+
+    this.isMobileNavOpen.set(true);
+    queueMicrotask(() => this.mobileNavFirstItem?.nativeElement.focus());
+  }
+
+  closeMobileNav() {
+    const wasOpen = this.isMobileNavOpen();
+    this.isMobileNavOpen.set(false);
+    if (wasOpen) setTimeout(() => this.mobileNavToggle?.nativeElement.focus());
+  }
+
+  closeErrorAlert() {
+    this.error.set('');
+  }
+
+  errorTitle() {
+    const message = this.error().toLowerCase();
+    if (message.includes("couldn't connect to cloudvault")) return 'CloudVault is unreachable';
+    if (message.includes('500 mb') || message.includes('maximum upload size')) {
+      return 'This file is too large';
+    }
+    if (message.includes('quota') || message.includes('storage space')) {
+      return 'Not enough storage space';
+    }
+    if (message.includes('upload') || message.includes('file transfer')) {
+      return "The upload couldn't be completed";
+    }
+    return "This action couldn't be completed";
+  }
+
+  errorGuidance() {
+    const message = this.error().toLowerCase();
+    if (message.includes("couldn't connect to cloudvault")) {
+      return 'Check your internet connection and confirm the CloudVault server is online, then try again.';
+    }
+    if (message.includes('500 mb') || message.includes('maximum upload size')) {
+      return 'Choose a file smaller than 500 MB.';
+    }
+    if (message.includes('quota') || message.includes('storage space')) {
+      return 'Free up storage space or choose a smaller file.';
+    }
+    if (message.includes('file transfer')) {
+      return 'Your upload did not finish. Check your connection and try again.';
+    }
+    return '';
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape() {
+    if (this.error()) {
+      this.closeErrorAlert();
+      return;
+    }
+    this.closeMobileNav();
   }
 
   toggleStar(file: FileRecord) {
@@ -399,6 +469,7 @@ export class DashboardComponent {
   }
 
   async showShares() {
+    this.closeMobileNav();
     this.isSharesDialogOpen.set(true);
     await this.loadShares();
   }
@@ -410,7 +481,18 @@ export class DashboardComponent {
   async loadShares() {
     this.isLoadingShares.set(true);
     try {
-      this.shares.set(await this.api.listShares());
+      const shares = await this.api.listShares();
+      const enrichedShares = await Promise.all(shares.map(async (share) => {
+        if (share.original_name) return share;
+        try {
+          const file = await this.api.getFile(share.file_id);
+          return { ...share, original_name: file.original_name };
+        } catch (error) {
+          this.error.set(getApiErrorMessage(error, `Unable to load the filename for share ${share.id}.`));
+          return { ...share, original_name: 'Filename unavailable' };
+        }
+      }));
+      this.shares.set(enrichedShares);
     } catch (error) {
       this.error.set(getApiErrorMessage(error, 'Unable to load shares.'));
     } finally {
@@ -423,10 +505,56 @@ export class DashboardComponent {
     this.isLoadingShares.set(true);
     try {
       await this.api.revokeShare(share.id);
+      this.shareLinks.update((links) => {
+        const updated = new Map(links);
+        updated.delete(share.id);
+        return updated;
+      });
       await this.loadShares();
     } catch (error) {
       this.error.set(getApiErrorMessage(error, 'Unable to revoke share.'));
       this.isLoadingShares.set(false);
+    }
+  }
+
+  async regenerateAndCopyShareLink(share: Share) {
+    if (this.regeneratingShareId()) return;
+    this.regeneratingShareId.set(share.id);
+    this.shareLinkStatus.set(null);
+    try {
+      const result = await this.api.regenerateShareLink(share.id);
+      const url = this.shareLink(result.token);
+      this.shareLinks.update((links) => new Map(links).set(share.id, url));
+      try {
+        await navigator.clipboard.writeText(url);
+        this.shareLinkStatus.set({
+          shareId: share.id,
+          message: 'New link copied. The previous link no longer works.',
+        });
+      } catch {
+        this.shareLinkStatus.set({
+          shareId: share.id,
+          message: 'New link created. Select the link above to copy it; the previous link no longer works.',
+        });
+      }
+    } catch (error) {
+      this.error.set(getApiErrorMessage(error, 'Unable to create a new share link.'));
+    } finally {
+      this.regeneratingShareId.set(null);
+    }
+  }
+
+  async copyShareUrl(share: Share) {
+    const url = this.shareLinks().get(share.id);
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      this.shareLinkStatus.set({ shareId: share.id, message: 'Link copied.' });
+    } catch {
+      this.shareLinkStatus.set({
+        shareId: share.id,
+        message: 'Clipboard access is unavailable. Select the link above to copy it.',
+      });
     }
   }
 
@@ -538,11 +666,15 @@ export class DashboardComponent {
   pageTitle() {
     if (this.viewMode() === 'recent') return 'Recent';
     if (this.viewMode() === 'starred') return 'Starred';
-    return this.contents()?.name || 'My files';
+    return 'My Files';
   }
 
   isStarred(file: FileRecord) {
     return this.starredIds().has(file.id);
+  }
+
+  fileTypeLabel(extension: string) {
+    return extension ? extension.slice(0, 4).toUpperCase() : 'FILE';
   }
 
   trackFile(_index: number, file: FileRecord) { return file.id; }

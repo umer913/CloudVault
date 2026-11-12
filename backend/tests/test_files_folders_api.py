@@ -87,6 +87,48 @@ def test_storage_usage_is_updated_after_upload(client, make_user, monkeypatch):
     assert usage.json()["used_bytes"] == 5
 
 
+def test_upload_and_rename_accept_arbitrary_extensions(client, make_user, monkeypatch):
+    headers, _ = make_user()
+
+    class FakeStorage:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def upload(self, *_args, **_kwargs):
+            return None
+
+    monkeypatch.setattr(
+        "app.routers.files.SupabaseStorage",
+        lambda: FakeStorage(),
+    )
+    uploaded = client.post(
+        "/api/files/upload",
+        files={
+            "file": (
+                "Counter-Strike 2.app",
+                BytesIO(b"application bundle data"),
+                "application/octet-stream",
+            )
+        },
+        headers=headers,
+    )
+
+    assert uploaded.status_code == 201, uploaded.text
+    assert uploaded.json()["extension"] == "app"
+    assert uploaded.json()["mime_type"] == "application/octet-stream"
+
+    renamed = client.patch(
+        f"/api/files/{uploaded.json()['id']}",
+        json={"name": "Counter-Strike 2.bundle"},
+        headers=headers,
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["extension"] == "bundle"
+
+
 def test_file_is_not_accessible_to_another_user(client, make_user, monkeypatch):
     owner_headers, _ = make_user("owner@example.com")
 

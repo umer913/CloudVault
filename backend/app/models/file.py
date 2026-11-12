@@ -24,7 +24,7 @@ class File(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     folder_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     original_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    extension: Mapped[str] = mapped_column(String(10), nullable=False)
+    extension: Mapped[str] = mapped_column(String(255), nullable=False)
     storage_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     mime_type: Mapped[str] = mapped_column(String(150), nullable=False)

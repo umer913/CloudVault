@@ -24,7 +24,7 @@ def create_share(
     permission: str,
     expires_at: datetime,
     password: str | None,
-) -> tuple[Share, str]:
+) -> tuple[Share, str, str]:
     file_record = _owned_file(db, user, file_id)
     now = datetime.now(timezone.utc)
     expiry = _ensure_utc(expires_at)
@@ -55,14 +55,14 @@ def create_share(
     db.add(share)
     db.commit()
     db.refresh(share)
-    return share, token
+    return share, token, file_record.original_name
 
 
-def list_owned_shares(db: Session, user: User) -> list[Share]:
+def list_owned_shares(db: Session, user: User) -> list[tuple[Share, str]]:
     now = datetime.now(timezone.utc)
     return list(
-        db.scalars(
-            select(Share)
+        db.execute(
+            select(Share, File.original_name)
             .join(File, File.id == Share.file_id)
             .where(
                 File.user_id == user.id,
@@ -74,6 +74,28 @@ def list_owned_shares(db: Session, user: User) -> list[Share]:
     )
 
 
+def rotate_share_token(
+    db: Session,
+    user: User,
+    share_id: int,
+) -> tuple[Share, str, str]:
+    share = get_owned_share(db, user, share_id)
+    if share.revoked_at is not None or _ensure_utc(share.expires_at) <= datetime.now(
+        timezone.utc
+    ):
+        raise AppError(404, "SHARE_NOT_FOUND", "Share not found.")
+
+    file_record = db.get(File, share.file_id)
+    if file_record is None:
+        raise AppError(404, "FILE_NOT_FOUND", "File not found.")
+
+    token = secrets.token_urlsafe(32)
+    share.token_hash = hashlib.sha256(token.encode()).hexdigest()
+    db.commit()
+    db.refresh(share)
+    return share, token, file_record.original_name
+
+
 def get_owned_share(db: Session, user: User, share_id: int) -> Share:
     share = db.scalar(
         select(Share)
@@ -83,6 +105,21 @@ def get_owned_share(db: Session, user: User, share_id: int) -> Share:
     if share is None:
         raise AppError(404, "SHARE_NOT_FOUND", "Share not found.")
     return share
+
+
+def get_owned_share_with_name(
+    db: Session,
+    user: User,
+    share_id: int,
+) -> tuple[Share, str]:
+    result = db.execute(
+        select(Share, File.original_name)
+        .join(File, File.id == Share.file_id)
+        .where(Share.id == share_id, File.user_id == user.id)
+    ).first()
+    if result is None:
+        raise AppError(404, "SHARE_NOT_FOUND", "Share not found.")
+    return result
 
 
 def revoke_share(db: Session, user: User, share_id: int) -> None:

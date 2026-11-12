@@ -1,14 +1,14 @@
-<div class="app-shell">
-  <aside class="sidebar">
-    <div class="brand"><span class="brand-mark small">C</span><strong>CloudVault</strong></div>
+<div class="app-shell" [attr.inert]="error() ? '' : null">
+  <aside class="sidebar" id="dashboard-sidebar" [class.mobile-open]="isMobileNavOpen()">
+    <div class="brand"><img class="brand-mark small" src="/cloudvault-favicon.svg" alt=""><strong>CloudVault</strong></div>
     <nav class="sidebar-nav">
-      <button class="tree-root" type="button" (click)="openRoot()"><span class="tree-icon folder-icon" aria-hidden="true"></span><strong>All files</strong><span class="tree-count">{{ totalFiles() }}</span><span class="tree-chevron">⌃</span></button>
+      <button #mobileNavFirstItem class="tree-root" type="button" (click)="openRoot()"><svg class="tree-icon folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4.2l2 2H18.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg><strong>All files</strong><span class="tree-count">{{ totalFiles() }}</span><span class="tree-chevron">⌃</span></button>
       <div class="folder-tree">
         @for (item of visibleTreeFolders(); track item.kind === 'folder' ? item.id : item.file.id) {
           @if (item.kind === 'folder') {
             <div class="tree-folder-row" [style.padding-left.px]="8 + item.depth * 18">
               <button class="tree-toggle" type="button" [attr.aria-label]="expandedFolders().has(item.id) ? 'Collapse folder' : 'Expand folder'" (click)="toggleFolder(item.id)">{{ expandedFolders().has(item.id) ? '⌄' : '›' }}</button>
-              <button class="tree-folder" [class.selected]="contents()?.id === item.id" type="button" (click)="openFolder(item.id)"><span class="tree-icon folder-icon" aria-hidden="true"></span><span>{{ item.name }}</span></button>
+              <button class="tree-folder" [class.selected]="contents()?.id === item.id" type="button" (click)="openFolder(item.id)"><svg class="tree-icon folder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4.2l2 2H18.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg><span>{{ item.name }}</span></button>
             </div>
           } @else {
             <div class="tree-file-row" [style.padding-left.px]="28 + item.depth * 18">
@@ -29,8 +29,19 @@
       <button class="logout" type="button" (click)="signOut()">Sign out</button>
     </div>
   </aside>
-  <main class="content">
-    <header><div><p class="eyebrow">YOUR WORKSPACE</p><h1>{{ pageTitle() }}</h1></div>@if (viewMode() === 'all') {<div class="header-actions"><button class="secondary-button" type="button" (click)="showFolderDialog()">+ New folder</button><label class="upload-button" [class.disabled]="isUploading()">+ Upload files<input type="file" [disabled]="isUploading()" (change)="upload($event)" /></label></div>}</header>
+  @if (isMobileNavOpen()) {
+    <button class="sidebar-backdrop" type="button" aria-label="Close navigation" (click)="closeMobileNav()"></button>
+  }
+  <main class="content" [attr.inert]="isMobileNavOpen() ? '' : null">
+    <header>
+      <div class="header-title">
+        <button #mobileNavToggle class="mobile-menu-button" type="button" [attr.aria-label]="isMobileNavOpen() ? 'Close navigation' : 'Open navigation'" aria-controls="dashboard-sidebar" [attr.aria-expanded]="isMobileNavOpen()" (click)="toggleMobileNav()">
+          <span aria-hidden="true">☰</span>
+        </button>
+        <div><h1>{{ pageTitle() }}</h1></div>
+      </div>
+      @if (viewMode() === 'all') {<div class="header-actions"><button class="secondary-button" type="button" (click)="showFolderDialog()">+ New folder</button><label class="upload-button" [class.disabled]="isUploading()">+ Upload files<input type="file" [disabled]="isUploading()" (change)="upload($event)" /></label></div>}
+    </header>
     @if (viewMode() === 'all') {
       <section class="drop-zone" [class.drag-active]="isDragActive()" [class.disabled]="isUploading()" (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)" (drop)="onDrop($event)">
         <span class="drop-icon">↑</span><div><strong>Drop files here to upload</strong><span>or use the Upload files button above</span></div>
@@ -54,11 +65,10 @@
         <div class="summary-cards">
           <div class="summary-card"><span class="summary-card-icon files-icon">▤</span><div><span class="muted">Total files</span><strong>{{ totalFiles() }}</strong></div></div>
           <div class="summary-card"><span class="summary-card-icon available-icon">✓</span><div><span class="muted">Available space</span><strong>{{ formatBytes(storage.remaining_bytes) }}</strong></div></div>
-          <div class="summary-card"><span class="summary-card-icon folder-summary-icon">▰</span><div><span class="muted">Current location</span><strong>{{ contents()?.name || 'My files' }}</strong></div></div>
+          <div class="summary-card"><span class="summary-card-icon folder-summary-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4.2l2 2H18.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></span><div><span class="muted">Current location</span><strong>{{ contents()?.name || 'My files' }}</strong></div></div>
         </div>
       </section>
     }
-    @if (error()) { <div class="error-banner">{{ error() }}</div> }
     <div class="toolbar"><span class="muted">{{ totalFiles() }} files</span></div>
     @if (viewMode() === 'all') {<section class="file-tools">
       <label class="search-box">Search files<input type="search" [value]="searchQuery()" (input)="onSearchChange($any($event.target).value)" placeholder="Search by filename" /></label>
@@ -71,8 +81,8 @@
         <div class="loading-panel" aria-live="polite"><span class="spinner"></span><strong>Loading folder...</strong><span class="muted">Fetching your files and folders</span></div>
       }
       @if (!isLoading()) {
-      @for (folder of contents()?.folders; track folder.id) {<div class="file-card folder-card"><button class="folder-main" type="button" [disabled]="isLoading() || !!folderActionId()" (click)="openFolder(folder.id)"><span class="file-icon folder">▰</span><strong>{{ folder.name }}</strong><span class="muted">Folder</span></button><div class="file-actions"><button type="button" (click)="showFolderRenameDialog(folder.id, folder.name)">Rename</button><button type="button" class="danger" (click)="deleteFolder(folder.id, folder.name)">Delete</button></div></div>}
-      @for (file of contents()?.files; track trackFile($index, file)) {<div class="file-card"><button class="star-button" type="button" [class.starred]="isStarred(file)" [attr.aria-label]="isStarred(file) ? 'Remove from Starred' : 'Add to Starred'" [attr.aria-pressed]="isStarred(file)" (click)="toggleStar(file)">{{ isStarred(file) ? '★' : '☆' }}</button><span class="file-icon">{{ file.extension.toUpperCase() }}</span><strong>{{ file.original_name }}</strong><span class="muted">{{ formatBytes(file.size) }}</span><div class="file-actions"><button type="button" (click)="downloadFile(file)">Download</button>@if (['pdf','png','jpg','jpeg','txt'].includes(file.extension)) {<button type="button" (click)="downloadFile(file, true)">Preview</button>}<button type="button" (click)="showShareDialog(file)">Share</button><button type="button" (click)="showRenameDialog(file)">Rename</button><button type="button" class="danger" (click)="deleteFile(file)">Delete</button></div></div>}
+      @for (folder of contents()?.folders; track folder.id) {<div class="file-card folder-card"><button class="folder-main" type="button" [disabled]="isLoading() || !!folderActionId()" (click)="openFolder(folder.id)"><span class="file-icon folder"><svg class="folder-symbol" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4.2l2 2H18.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg></span><strong>{{ folder.name }}</strong><span class="muted">Folder</span></button><div class="file-actions"><button type="button" (click)="showFolderRenameDialog(folder.id, folder.name)">Rename</button><button type="button" class="danger" (click)="deleteFolder(folder.id, folder.name)">Delete</button></div></div>}
+      @for (file of contents()?.files; track trackFile($index, file)) {<div class="file-card"><button class="star-button" type="button" [class.starred]="isStarred(file)" [attr.aria-label]="isStarred(file) ? 'Remove from Starred' : 'Add to Starred'" [attr.aria-pressed]="isStarred(file)" (click)="toggleStar(file)">{{ isStarred(file) ? '★' : '☆' }}</button><span class="file-icon">{{ fileTypeLabel(file.extension) }}</span><strong>{{ file.original_name }}</strong><span class="muted">{{ formatBytes(file.size) }}</span><div class="file-actions"><button type="button" (click)="downloadFile(file)">Download</button>@if (['pdf','png','jpg','jpeg','txt'].includes(file.extension)) {<button type="button" (click)="downloadFile(file, true)">Preview</button>}<button type="button" (click)="showShareDialog(file)">Share</button><button type="button" (click)="showRenameDialog(file)">Rename</button><button type="button" class="danger" (click)="deleteFile(file)">Delete</button></div></div>}
       @if (!contents()?.folders?.length && !contents()?.files?.length) {<div class="empty"><span>✦</span><h2>{{ viewMode() === 'starred' ? 'No starred files yet' : viewMode() === 'recent' ? 'No recent files yet' : 'This space is yours' }}</h2><p>{{ viewMode() === 'starred' ? 'Star a file to keep it easy to find.' : viewMode() === 'recent' ? 'Recently added files will appear here.' : 'Upload a file to start building your vault.' }}</p></div>}
       }
       @if (isRenameDialogOpen()) {
@@ -145,12 +155,37 @@
   <div class="modal-backdrop" (click)="closeShares()">
     <section class="folder-dialog shares-dialog" role="dialog" aria-modal="true" aria-labelledby="shares-title" (click)="$event.stopPropagation()">
       <h2 id="shares-title">Shared links</h2>
+      <p class="muted shares-dialog-note">Generate a fresh link to copy it. Doing so disables the previous link.</p>
       @if (isLoadingShares()) { <div class="loading-panel"><span class="spinner"></span><span class="muted">Loading shared links...</span></div> }
       @if (!isLoadingShares() && !shares().length) { <p class="muted">You have no active shared links.</p> }
       @for (share of shares(); track share.id) {
-        <div class="share-row"><div><strong>File #{{ share.file_id }}</strong><span class="muted">{{ share.permission }} access · expires {{ formatDate(share.expires_at) }}</span></div><button class="danger-button" type="button" (click)="revokeShare(share)">Revoke</button></div>
+        <div class="share-row">
+          <div class="share-row-content">
+            <div class="share-row-heading"><div><strong>{{ share.original_name || 'Filename unavailable' }}</strong><span class="muted">{{ share.permission }} access · expires {{ formatDate(share.expires_at) }}</span></div>
+              <button class="danger-button" type="button" (click)="revokeShare(share)">Revoke</button>
+            </div>
+            @if (shareLinks().get(share.id); as url) {
+              <div class="share-link-field"><input readonly [value]="url" aria-label="Share link" (focus)="$any($event.target).select()" /><button class="secondary-button" type="button" (click)="copyShareUrl(share)">Copy</button></div>
+            }
+            <div class="share-row-footer">
+              <span class="share-link-status" aria-live="polite">@if (shareLinkStatus()?.shareId === share.id) { {{ shareLinkStatus()?.message }} }</span>
+              <button class="secondary-button" type="button" [disabled]="regeneratingShareId() !== null" (click)="regenerateAndCopyShareLink(share)">{{ regeneratingShareId() === share.id ? 'Creating link...' : shareLinks().has(share.id) ? 'Regenerate & copy' : 'Generate & copy link' }}</button>
+            </div>
+          </div>
+        </div>
       }
       <div class="dialog-actions"><button class="secondary-button" type="button" [disabled]="isLoadingShares()" (click)="closeShares()">Close</button></div>
+    </section>
+  </div>
+}
+@if (error()) {
+  <div class="modal-backdrop alert-backdrop">
+    <section class="alert-dialog" role="alertdialog" aria-modal="true" aria-labelledby="error-alert-title" aria-describedby="error-alert-message">
+      <div class="alert-dialog-icon" aria-hidden="true">!</div>
+      <h2 id="error-alert-title">{{ errorTitle() }}</h2>
+      <p id="error-alert-message">{{ error() }}</p>
+      @if (errorGuidance(); as guidance) { <p class="alert-dialog-guidance">{{ guidance }}</p> }
+      <button #errorAlertClose class="primary-button" type="button" autofocus (click)="closeErrorAlert()">Got it</button>
     </section>
   </div>
 }
