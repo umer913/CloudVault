@@ -1,11 +1,12 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { ApiService, getApiErrorMessage } from '../../core/api/api.service';
 import { AuthService } from '../../core/auth/auth.service';
 
 @Component({
   selector: 'app-auth-page',
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   templateUrl: './auth-page.component.html',
   styleUrl: './auth-page.component.scss',
 })

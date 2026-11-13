@@ -11,5 +11,7 @@
 .auth-card .primary:disabled{opacity:.75;cursor:not-allowed}
 .link-button{color:var(--cv-primary);font-weight:700}
 .link-button:hover{color:var(--cv-primary-deep);text-decoration:underline}
+.about-link{display:block;margin:10px auto 0;color:var(--cv-muted);font-size:13px;text-align:center;text-decoration:none}
+.about-link:hover{color:var(--cv-primary);text-decoration:underline}
 .error{color:var(--cv-danger);background:var(--cv-danger-soft)}
 @media(max-width:480px){.auth-card{padding:32px 24px}.auth-card h1{font-size:28px}}

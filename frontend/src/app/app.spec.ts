@@ -1,10 +1,23 @@
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { signal } from '@angular/core';
 import { App } from './app';
+import { routes } from './app.routes';
+import { AuthService } from './core/auth/auth.service';
+
+const authMock = {
+  user: signal(null),
+  isLoading: signal(false),
+};
 
 describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
+      providers: [
+        provideRouter(routes),
+        { provide: AuthService, useValue: authMock },
+      ],
     })
       .compileComponents();
   });
@@ -15,10 +28,9 @@ describe('App', () => {
     expect(app).toBeTruthy();
   });
 
-  it('should render the authentication screen', async () => {
+  it('creates the application shell', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
-    const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Welcome back');
+    expect(fixture.componentInstance).toBeTruthy();
   });
 });

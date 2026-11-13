@@ -118,6 +118,27 @@ def test_revoked_share_is_not_publicly_available(client, make_user, monkeypatch)
     assert listed.json() == []
 
 
+def test_creating_another_share_replaces_the_existing_file_link(
+    client, make_user, monkeypatch
+):
+    headers, _ = make_user()
+    uploaded = _upload_text(client, headers, monkeypatch)
+    first = _create_share(client, headers, uploaded["id"]).json()
+    second = _create_share(
+        client,
+        headers,
+        uploaded["id"],
+        permission="view",
+    ).json()
+
+    assert client.get(f"/api/public/share/{first['token']}").status_code == 404
+    assert client.get(f"/api/public/share/{second['token']}").status_code == 200
+    listed = client.get("/api/shares", headers=headers)
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+    assert listed.json()[0]["id"] == second["id"]
+
+
 def test_share_link_can_be_regenerated_and_invalidates_previous_token(
     client, make_user, monkeypatch
 ):

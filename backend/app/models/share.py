@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -32,4 +32,11 @@ class Share(Base):
             name="ck_shares_permission",
         ),
         Index("ix_shares_file", "file_id"),
+        Index(
+            "uq_shares_one_active_per_file",
+            "file_id",
+            unique=True,
+            postgresql_where=text("revoked_at IS NULL"),
+            sqlite_where=text("revoked_at IS NULL"),
+        ),
     )

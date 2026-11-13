@@ -22,6 +22,7 @@ export class PublicShareComponent implements OnInit, OnDestroy {
   readonly passwordRequired = signal(false);
   readonly error = signal('');
   readonly previewUrl = signal<SafeResourceUrl | null>(null);
+  readonly imagePreviewUrl = signal<string | null>(null);
   password = '';
   private readonly token = this.route.snapshot.paramMap.get('token') ?? '';
   private objectUrl: string | null = null;
@@ -126,6 +127,12 @@ export class PublicShareComponent implements OnInit, OnDestroy {
   private setPreviewUrl(content: Blob) {
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
     this.objectUrl = URL.createObjectURL(content);
-    this.previewUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(this.objectUrl));
+    if (this.share()?.mime_type.startsWith('image/')) {
+      this.imagePreviewUrl.set(this.objectUrl);
+      this.previewUrl.set(null);
+    } else {
+      this.previewUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(this.objectUrl));
+      this.imagePreviewUrl.set(null);
+    }
   }
 }

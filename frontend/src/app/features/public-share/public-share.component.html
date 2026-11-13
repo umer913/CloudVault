@@ -25,14 +25,18 @@
       @if (error()) { <p class="share-error" role="alert">{{ error() }}</p> }
       @if (file.permission === 'view') {
         <button class="share-primary" type="button" [disabled]="isOpening()" (click)="openSharedFile()">
-          {{ isOpening() ? 'Opening file...' : previewUrl() ? 'Reload preview' : 'Open file' }}
+          {{ isOpening() ? 'Opening file...' : previewUrl() || imagePreviewUrl() ? 'Reload preview' : 'Open file' }}
         </button>
       } @else {
         <button class="share-primary" type="button" [disabled]="isOpening()" (click)="downloadSharedFile()">
           {{ isOpening() ? 'Preparing download...' : 'Download file' }}
         </button>
       }
-      @if (previewUrl(); as url) {
+      @if (imagePreviewUrl(); as url) {
+        <div class="share-image-frame">
+          <img class="share-image-preview" [src]="url" [alt]="'Preview of ' + file.original_name">
+        </div>
+      } @else if (previewUrl(); as url) {
         <iframe class="share-preview" [src]="url" [title]="'Preview of ' + file.original_name"></iframe>
       }
     } @else {

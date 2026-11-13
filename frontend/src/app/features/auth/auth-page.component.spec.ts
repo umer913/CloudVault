@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { ApiService } from '../../core/api/api.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { AuthPageComponent } from './auth-page.component';
@@ -15,6 +16,7 @@ describe('AuthPageComponent', () => {
     await TestBed.configureTestingModule({
       imports: [AuthPageComponent],
       providers: [
+        provideRouter([]),
         { provide: AuthService, useValue: authMock },
         { provide: ApiService, useValue: {} },
       ],

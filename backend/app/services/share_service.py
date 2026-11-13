@@ -5,7 +5,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from pwdlib import PasswordHash
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.errors import AppError
@@ -44,6 +44,11 @@ def create_share(
             "View sharing is only available for previewable files.",
         )
 
+    db.execute(
+        update(Share)
+        .where(Share.file_id == file_id, Share.revoked_at.is_(None))
+        .values(revoked_at=now)
+    )
     token = secrets.token_urlsafe(32)
     share = Share(
         file_id=file_id,
@@ -158,7 +163,9 @@ def verify_share_password(share: Share, password: str | None) -> None:
 
 def _owned_file(db: Session, user: User, file_id: int) -> File:
     file_record = db.scalar(
-        select(File).where(File.id == file_id, File.user_id == user.id)
+        select(File)
+        .where(File.id == file_id, File.user_id == user.id)
+        .with_for_update()
     )
     if file_record is None:
         raise AppError(404, "FILE_NOT_FOUND", "File not found.")

@@ -67,4 +67,27 @@ describe('PublicShareComponent', () => {
 
     expect(fixture.nativeElement.textContent).toContain('That password did not match.');
   });
+
+  it('renders image previews as contained images instead of browser-native iframe previews', async () => {
+    const fixture = TestBed.createComponent(PublicShareComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    fixture.componentInstance.share.set({
+      file_id: 7,
+      original_name: 'photo.png',
+      size: 1024,
+      mime_type: 'image/png',
+      permission: 'view',
+      expires_at: '2026-11-18T00:00:00Z',
+      password_required: false,
+    });
+    fixture.componentInstance.imagePreviewUrl.set('blob:preview');
+    fixture.detectChanges();
+
+    const image = fixture.nativeElement.querySelector('.share-image-preview');
+    expect(image.getAttribute('src')).toBe('blob:preview');
+    expect(image.getAttribute('alt')).toBe('Preview of photo.png');
+    expect(fixture.nativeElement.querySelector('iframe')).toBeNull();
+  });
 });

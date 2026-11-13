@@ -120,6 +120,7 @@
               <div class="share-link"><input readonly [value]="shareLink(result.token)" /><button class="primary-button" type="button" (click)="copyShareLink(result)">Copy</button></div>
               <div class="dialog-actions"><button class="secondary-button" type="button" (click)="closeShareDialog()">Done</button></div>
             } @else {
+              <p class="muted">Creating a new link for this file revokes any existing link, including links with different permissions.</p>
               <form (ngSubmit)="createShare()">
                 <label>Permission <select name="sharePermission" [(ngModel)]="sharePermission"><option value="download">Download</option><option value="view">View only</option></select></label>
                 <label>Expires <input name="shareExpiresAt" type="datetime-local" [(ngModel)]="shareExpiresAt" required /></label>
