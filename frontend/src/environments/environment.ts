@@ -1,4 +1,4 @@
 export const environment = {
   production: true,
-  apiUrl: 'cloudvault.up.railway.app',
+  apiUrl: 'https://cloudvault.up.railway.app',
 };

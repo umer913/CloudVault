@@ -1,6 +1,6 @@
 {
   "/api": {
-    "target": "cloudvault.up.railway.app",
+    "target": "https://cloudvault.up.railway.app",
     "secure": true,
     "changeOrigin": true
   }
