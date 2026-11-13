@@ -1,6 +1,6 @@
 {
   "/api": {
-    "target": "https://sunny-reverence-production-8517d5b6.up.railway.app",
+    "target": "cloudvault.up.railway.app",
     "secure": true,
     "changeOrigin": true
   }
