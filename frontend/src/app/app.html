@@ -1,4 +1,6 @@
-@if (auth.isLoading()) {
+@if (isPublicShareRoute()) {
+  <router-outlet />
+} @else if (auth.isLoading()) {
   <main class="loading">Loading CloudVault...</main>
 } @else if (auth.user()) {
   <app-dashboard />

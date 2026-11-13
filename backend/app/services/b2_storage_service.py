@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from typing import Any, BinaryIO, Callable
+from urllib.parse import quote
 
 import boto3
 from botocore.config import Config
@@ -102,14 +103,26 @@ class B2Storage:
             raise StorageError("B2 availability check failed.") from exc
         return True
 
-    def create_signed_url(self, key: str, *, expires_in: int) -> str:
+    def create_signed_url(
+        self,
+        key: str,
+        *,
+        expires_in: int,
+        download_filename: str | None = None,
+    ) -> str:
         self.validate_key(key)
         if not 1 <= expires_in <= 3600:
             raise ValueError("Signed URL lifetime must be between 1 and 3600 seconds.")
         try:
+            params: dict[str, str] = {"Bucket": self.bucket, "Key": key}
+            if download_filename is not None:
+                encoded_filename = quote(download_filename, safe="")
+                params["ResponseContentDisposition"] = (
+                    f"attachment; filename*=UTF-8''{encoded_filename}"
+                )
             return self._client.generate_presigned_url(
                 "get_object",
-                Params={"Bucket": self.bucket, "Key": key},
+                Params=params,
                 ExpiresIn=expires_in,
             )
         except (BotoCoreError, ClientError) as exc:

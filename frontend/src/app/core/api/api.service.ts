@@ -1,7 +1,7 @@
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { CreatedShare, FileList, FileRecord, Folder, FolderContents, FolderTree, Share, Usage, User } from '../models/api.models';
+import { CreatedShare, FileList, FileRecord, Folder, FolderContents, FolderTree, PublicShare, Share, Usage, User } from '../models/api.models';
 import { environment } from '../../../environments/environment';
 
 export function getApiErrorMessage(error: unknown, fallback = 'Request failed.') {
@@ -152,7 +152,24 @@ export class ApiService {
   }
 
   publicShareUrl(token: string) {
-    return `${this.baseUrl}/api/public/share/${token}/content`;
+    return new URL(`/share/${encodeURIComponent(token)}`, window.location.origin).toString();
+  }
+
+  getPublicShare(token: string, password?: string) {
+    return firstValueFrom(this.http.get<PublicShare>(
+      `${this.baseUrl}/api/public/share/${encodeURIComponent(token)}`,
+      { headers: password ? { 'X-Share-Password': password } : {} },
+    ));
+  }
+
+  getPublicShareContent(token: string, password?: string) {
+    return firstValueFrom(this.http.get(
+      `${this.baseUrl}/api/public/share/${encodeURIComponent(token)}/content`,
+      {
+        headers: password ? { 'X-Share-Password': password } : {},
+        responseType: 'blob',
+      },
+    ));
   }
 
   downloadFile(id: number, inline = false) {

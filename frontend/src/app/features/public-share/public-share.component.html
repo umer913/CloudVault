@@ -1,0 +1,44 @@
+<main class="public-share-page">
+  <section class="public-share-card">
+    <a class="share-brand" href="/" aria-label="CloudVault home">
+      <img src="/cloudvault-favicon.svg" alt="">
+      <span>CloudVault</span>
+    </a>
+
+    @if (isLoading()) {
+      <div class="share-loading" role="status"><span class="share-spinner"></span><span>Checking share link...</span></div>
+    } @else if (passwordRequired() && !share()) {
+      <div class="share-icon" aria-hidden="true">⌑</div>
+      <h1>Password-protected file</h1>
+      <p class="share-description">Enter the password provided by the person who shared this file.</p>
+      @if (error()) { <p class="share-error" role="alert">{{ error() }}</p> }
+      <form class="share-password-form" (ngSubmit)="submitPassword()">
+        <label for="share-password">Share password</label>
+        <input id="share-password" name="password" type="password" [(ngModel)]="password" autocomplete="current-password" required autofocus>
+        <button class="share-primary" type="submit" [disabled]="!password.trim() || isLoading()">Unlock file</button>
+      </form>
+    } @else if (share(); as file) {
+      <div class="share-icon" aria-hidden="true">↗</div>
+      <p class="share-eyebrow">SECURE FILE SHARE</p>
+      <h1>{{ file.original_name }}</h1>
+      <p class="share-description">{{ formatBytes(file.size) }} · {{ file.permission === 'view' ? 'View access' : 'Download access' }}</p>
+      @if (error()) { <p class="share-error" role="alert">{{ error() }}</p> }
+      @if (file.permission === 'view') {
+        <button class="share-primary" type="button" [disabled]="isOpening()" (click)="openSharedFile()">
+          {{ isOpening() ? 'Opening file...' : previewUrl() ? 'Reload preview' : 'Open file' }}
+        </button>
+      } @else {
+        <button class="share-primary" type="button" [disabled]="isOpening()" (click)="downloadSharedFile()">
+          {{ isOpening() ? 'Preparing download...' : 'Download file' }}
+        </button>
+      }
+      @if (previewUrl(); as url) {
+        <iframe class="share-preview" [src]="url" [title]="'Preview of ' + file.original_name"></iframe>
+      }
+    } @else {
+      <div class="share-icon share-icon-error" aria-hidden="true">!</div>
+      <h1>Link unavailable</h1>
+      <p class="share-description" role="alert">{{ error() || 'This share link may have expired or been revoked.' }}</p>
+    }
+  </section>
+</main>

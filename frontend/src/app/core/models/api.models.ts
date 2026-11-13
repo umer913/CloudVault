@@ -67,3 +67,13 @@ export type Share = {
 export type CreatedShare = Share & {
   token: string;
 };
+
+export type PublicShare = {
+  file_id: number;
+  original_name: string;
+  size: number;
+  mime_type: string;
+  permission: Share['permission'];
+  expires_at: string;
+  password_required: boolean;
+};

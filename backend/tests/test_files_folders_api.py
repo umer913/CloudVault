@@ -129,6 +129,53 @@ def test_upload_and_rename_accept_arbitrary_extensions(client, make_user, monkey
     assert renamed.json()["extension"] == "bundle"
 
 
+def test_signed_download_url_forces_attachment_but_preview_stays_inline(
+    client, make_user, monkeypatch
+):
+    headers, _ = make_user()
+
+    class FakeStorage:
+        download_filenames = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def upload(self, *_args, **_kwargs):
+            return None
+
+        def exists(self, _key):
+            return True
+
+        def create_signed_url(self, _key, *, expires_in, download_filename=None):
+            self.download_filenames.append(download_filename)
+            return "https://storage.example/signed-file"
+
+    monkeypatch.setattr(
+        "app.routers.files.SupabaseStorage",
+        FakeStorage,
+    )
+    uploaded = client.post(
+        "/api/files/upload",
+        files={"file": ("notes.txt", BytesIO(b"hello"), "text/plain")},
+        headers=headers,
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    file_id = uploaded.json()["id"]
+
+    download = client.get(f"/api/files/{file_id}/signed-url", headers=headers)
+    preview = client.get(
+        f"/api/files/{file_id}/signed-url?inline=true",
+        headers=headers,
+    )
+
+    assert download.status_code == 200
+    assert preview.status_code == 200
+    assert FakeStorage.download_filenames == ["notes.txt", None]
+
+
 def test_file_is_not_accessible_to_another_user(client, make_user, monkeypatch):
     owner_headers, _ = make_user("owner@example.com")
 

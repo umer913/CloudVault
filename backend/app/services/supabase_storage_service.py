@@ -4,6 +4,7 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, BinaryIO
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
@@ -158,7 +159,13 @@ class SupabaseStorage:
         self._raise_for_storage(response)
         return True
 
-    def create_signed_url(self, key: str, *, expires_in: int) -> str:
+    def create_signed_url(
+        self,
+        key: str,
+        *,
+        expires_in: int,
+        download_filename: str | None = None,
+    ) -> str:
         key = self.validate_key(key)
         if not 1 <= expires_in <= 3600:
             raise ValueError("Signed URL lifetime must be between 1 and 3600 seconds.")
@@ -178,6 +185,12 @@ class SupabaseStorage:
         signed_url = payload.get("signedURL")
         if not isinstance(signed_url, str) or not signed_url:
             raise StorageError("Storage returned an invalid signed URL.")
+        if download_filename is not None:
+            parts = urlsplit(signed_url)
+            query = urlencode(
+                [*parse_qsl(parts.query, keep_blank_values=True), ("download", download_filename)]
+            )
+            signed_url = urlunsplit(parts._replace(query=query))
         return signed_url
 
     def list_objects(

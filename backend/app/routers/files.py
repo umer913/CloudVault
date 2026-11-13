@@ -436,7 +436,13 @@ def signed_url(
     try:
         if not storage.exists(record.storage_key):
             raise AppError(404, "FILE_NOT_FOUND", "File not found.")
-        return {"url": storage.create_signed_url(record.storage_key, expires_in=300)}
+        return {
+            "url": storage.create_signed_url(
+                record.storage_key,
+                expires_in=300,
+                download_filename=None if inline else record.original_name,
+            )
+        }
     except StorageError as exc:
         raise AppError(
             502,
